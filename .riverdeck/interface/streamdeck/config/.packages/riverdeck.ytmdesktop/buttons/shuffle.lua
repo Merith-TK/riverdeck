@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / buttons/shuffle.lua
+-- riverdeck.ytmdesktop / buttons/shuffle.lua
 --
 -- Sends a shuffle toggle command.  The YTM API does not expose the current
 -- shuffle state so the button flashes briefly on press to indicate the command

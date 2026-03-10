@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / buttons/prev.lua
+-- riverdeck.ytmdesktop / buttons/prev.lua
 --
 -- Goes back to the previous track.  Dims when YTM Desktop is unreachable.
 

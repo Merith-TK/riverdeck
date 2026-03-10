@@ -1,6 +1,6 @@
-# NOMAD Lua Standard Library
+# Riverdeck Lua Standard Library
 
-This document describes the additional Lua modules available in the NOMAD scripting environment beyond the standard Lua libraries.
+This document describes the additional Lua modules available in the Riverdeck scripting environment beyond the standard Lua libraries.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ This document describes the additional Lua modules available in the NOMAD script
 
 ## Script Architectures
 
-NOMAD supports two script architectures for maximum flexibility:
+Riverdeck supports two script architectures for maximum flexibility:
 
 ### Legacy Mode (Global Functions)
 
@@ -84,6 +84,7 @@ return script  -- Important: return the module table
 ```
 
 **Benefits of Module Mode:**
+
 - Better encapsulation and organization
 - Configuration accessible to host system
 - Cleaner separation of data and functions

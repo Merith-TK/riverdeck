@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / buttons/play_pause.lua
+-- riverdeck.ytmdesktop / buttons/play_pause.lua
 --
 -- Toggles playback.  Shows ⏸ when playing, ▶ when paused, and dims when
 -- YTM Desktop is unreachable.

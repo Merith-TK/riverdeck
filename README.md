@@ -1,6 +1,6 @@
-# NOMAD Interface Stream Deck
+# Riverdeck
 
-A programmable interface for Elgato Stream Deck devices, designed for the NOMAD wearable computer platform. This Go application allows users to create custom button actions using Lua scripts, with folder-based navigation for organizing functionality.
+A programmable interface for Elgato Stream Deck devices. This Go application allows users to create custom button actions using Lua scripts, with folder-based navigation for organizing functionality.
 
 ## Features
 
@@ -22,7 +22,7 @@ Or build and run:
 
 ```bash
 go build
-./nomad-interface-streamdeck
+./riverdeck
 ```
 
 ### Configuration
@@ -30,7 +30,7 @@ go build
 Scripts are stored in the config directory structure:
 
 ```
-.nomad/interface/streamdeck/config/
+.riverdeck/interface/streamdeck/config/
 ├── apps/          # Application launch scripts
 ├── media/         # Media control scripts
 └── system/        # System control scripts
@@ -96,4 +96,4 @@ The application is structured for maintainability and extensibility:
 - Requires CGO for HID access
 - Automatically selects appropriate image format based on device model
 - Uses system fonts for text rendering
-- Designed for integration with the broader NOMAD ecosystem
+- Designed for integration with the broader Riverdeck ecosystem

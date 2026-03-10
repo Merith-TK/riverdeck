@@ -1,5 +1,5 @@
 // Package scripting provides Lua script execution and lifecycle management
-// for the NOMAD Stream Deck interface.
+// for the Riverdeck Stream Deck interface.
 //
 // # Script Architecture
 //

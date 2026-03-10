@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / buttons/next.lua
+-- riverdeck.ytmdesktop / buttons/next.lua
 --
 -- Skips to the next track.  Dims when YTM Desktop is unreachable.
 

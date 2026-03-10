@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / buttons/pair.lua
+-- riverdeck.ytmdesktop / buttons/pair.lua
 --
 -- Dedicated pairing button for the YTM Desktop companion package.
 --

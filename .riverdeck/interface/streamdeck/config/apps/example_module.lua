@@ -1,6 +1,6 @@
 --[[
   example_module.lua
-  Demonstrates the NOMAD module-based scripting architecture.
+  Demonstrates the Riverdeck module-based scripting architecture.
 
   Every script must return a table containing any combination of:
     script.background(state)         -- coroutine; use system.sleep() to yield

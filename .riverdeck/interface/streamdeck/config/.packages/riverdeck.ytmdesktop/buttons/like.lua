@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / buttons/like.lua
+-- riverdeck.ytmdesktop / buttons/like.lua
 --
 -- Toggles the like on the current track.
 --

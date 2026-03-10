@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / lib/ytm.lua
+-- riverdeck.ytmdesktop / lib/ytm.lua
 --
 -- Client library for button scripts to interact with YouTube Music Desktop App.
 -- Require this module in any button script:

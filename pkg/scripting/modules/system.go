@@ -1,4 +1,4 @@
-// Package modules provides Lua module loaders for the NOMAD scripting system.
+// Package modules provides Lua module loaders for the Riverdeck scripting system.
 //
 // Each module is registered as a preloaded Lua module and accessed inside
 // scripts with require(). Modules are bound to runtime context (device,

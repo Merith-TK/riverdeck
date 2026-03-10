@@ -1,5 +1,5 @@
 // Package lualib provides Go-native implementations of Lua standard library
-// modules for use with the NOMAD scripting system. Registering these as
+// modules for use with the Riverdeck scripting system. Registering these as
 // preloaded modules is faster than loading .lua files from disk at runtime.
 package lualib
 

@@ -1,4 +1,4 @@
--- nomad.ytmdesktop / daemon.lua
+-- riverdeck.ytmdesktop / daemon.lua
 --
 -- Keeps the shared store populated with the current YTM Desktop player state.
 -- Polling only starts once a valid token is present.
@@ -33,8 +33,8 @@ local log      = require('log')
 -- -- Configuration -------------------------------------------------------------
 
 local BASE_URL      = "http://127.0.0.1:9863/api/v1"
-local APP_ID        = "nomadstreamdeck"
-local APP_NAME      = "NOMAD Stream Deck"
+local APP_ID        = "riverdeckstreamdeck"
+local APP_NAME      = "Riverdeck Stream Deck"
 local APP_VER       = "1.0.0"
 local POLL_INTERVAL = 2000   -- ms between state polls when connected
 local RETRY_DELAY   = 10000  -- ms between reconnect attempts when YTM is absent
