@@ -1,0 +1,92 @@
+# NOMAD Stream Deck Interface Configuration
+# This file contains configuration for the Stream Deck interface application
+
+# Application settings
+application:
+  # Brightness level (0-100)
+  brightness: 75
+
+  # Passive update frequency in FPS (1-10, lower = less CPU usage)
+  passive_fps: 2
+
+  # Enable debug logging
+  debug: false
+
+# Device settings
+device:
+  # Auto-detect device (true) or specify path
+  auto_detect: true
+
+  # Specific device path (only used if auto_detect is false)
+  # path: "/dev/hidraw0"
+
+  # Device model override (leave empty for auto-detection)
+  # model: ""
+
+# Script settings
+scripting:
+  # Enable background script execution
+  enable_background: true
+
+  # Script execution timeout in seconds (0 = no timeout)
+  execution_timeout: 30
+
+  # Maximum number of concurrent script executions
+  max_concurrent_scripts: 10
+
+# UI settings
+ui:
+  # Navigation style: "folder" or "flat"
+  navigation_style: "folder"
+
+  # Show hidden files in navigation
+  show_hidden_files: false
+
+  # Custom button labels
+  labels:
+    back: "<-"
+    home: "HOME"
+
+# Performance settings
+performance:
+  # Image cache size in MB
+  image_cache_size: 50
+
+  # Enable image compression
+  compress_images: true
+
+  # JPEG quality for button images (1-100)
+  jpeg_quality: 90
+
+# Network settings
+network:
+  # HTTP request timeout in seconds
+  http_timeout: 10
+
+  # Enable HTTPS certificate verification
+  verify_ssl: true
+
+# Logging settings
+logging:
+  # Log level: "debug", "info", "warn", "error"
+  level: "info"
+
+  # Log to file (leave empty to log to console only)
+  file: ""
+
+  # Maximum log file size in MB
+  max_file_size: 10
+
+  # Maximum number of log files to keep
+  max_files: 5
+
+# Security settings
+security:
+  # Restrict file operations to config directory
+  restrict_file_access: true
+
+  # Allowed shell commands (empty = allow all)
+  allowed_commands: []
+
+  # Block network access for scripts
+  block_network: false

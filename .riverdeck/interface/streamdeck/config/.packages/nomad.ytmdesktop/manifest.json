@@ -1,0 +1,20 @@
+{
+	"id": "nomad.ytmdesktop",
+	"name": "YTM Desktop",
+	"version": "1.0.0",
+	"description": "YouTube Music Desktop App companion integration via the Companion Server API v1",
+	"provides": {
+		"libraries": [
+			"lib/ytm.lua"
+		],
+		"buttons": [
+			"buttons/pair.lua",
+			"buttons/play_pause.lua",
+			"buttons/next.lua",
+			"buttons/prev.lua",
+			"buttons/like.lua",
+			"buttons/shuffle.lua"
+		]
+	},
+	"requires": []
+}
