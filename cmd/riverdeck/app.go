@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -52,11 +53,18 @@ type App struct {
 	sleeping     bool
 	sleepTimer   *time.Timer
 	lastActivity time.Time
+
+	// Per-key GIF animation goroutines.
+	// Each running animation holds a cancel func; replace/cancel it to stop.
+	gifAnimsMu sync.Mutex
+	gifAnims   map[int]context.CancelFunc
 }
 
 // NewApp creates a new application instance.
 func NewApp() *App {
-	return &App{}
+	return &App{
+		gifAnims: make(map[int]context.CancelFunc),
+	}
 }
 
 // Init initializes the application, including device discovery and setup.
@@ -186,6 +194,14 @@ func (a *App) setupKeyUpdateCallback() {
 
 		// Check for custom image first
 		if appearance.Image != "" {
+			// Animated GIF: spin up a per-key animation goroutine.
+			if strings.ToLower(filepath.Ext(appearance.Image)) == ".gif" {
+				a.startGIFAnim(keyIndex, appearance.Image)
+				return
+			}
+
+			// Static image: cancel any running GIF for this key first.
+			a.stopGIFAnim(keyIndex)
 			img, err := scripting.LoadImage(appearance.Image)
 			if err == nil {
 				// Resize to fit key and display
@@ -195,6 +211,9 @@ func (a *App) setupKeyUpdateCallback() {
 			}
 			// Fall through to color/text if image load fails
 			log.Printf("Image load failed: %v", err)
+		} else {
+			// No image - cancel any running GIF for this key.
+			a.stopGIFAnim(keyIndex)
 		}
 
 		// Apply appearance to key
@@ -221,6 +240,82 @@ func (a *App) setupKeyUpdateCallback() {
 			a.device.SetKeyColor(keyIndex, c)
 		}
 	})
+}
+
+// stopGIFAnim cancels any running GIF animation goroutine for keyIndex.
+func (a *App) stopGIFAnim(keyIndex int) {
+	a.gifAnimsMu.Lock()
+	defer a.gifAnimsMu.Unlock()
+	if cancel, ok := a.gifAnims[keyIndex]; ok {
+		cancel()
+		delete(a.gifAnims, keyIndex)
+	}
+}
+
+// startGIFAnim loads an animated GIF and starts a goroutine that cycles
+// its frames onto keyIndex at the GIF's native frame rate.
+// Any previously running animation for that key is cancelled first.
+func (a *App) startGIFAnim(keyIndex int, path string) {
+	data, err := scripting.LoadGIFFrames(path)
+	if err != nil {
+		log.Printf("GIF load failed for key %d: %v", keyIndex, err)
+		return
+	}
+	if len(data.Frames) == 0 {
+		return
+	}
+
+	// Cancel any existing animation for this key.
+	a.gifAnimsMu.Lock()
+	if cancel, ok := a.gifAnims[keyIndex]; ok {
+		cancel()
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.gifAnims[keyIndex] = cancel
+	a.gifAnimsMu.Unlock()
+
+	go func() {
+		for {
+			for i, frame := range data.Frames {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				// Skip frame if display is asleep or settings overlay is active.
+				a.sleepMu.Lock()
+				isSleeping := a.sleeping
+				a.sleepMu.Unlock()
+				if !isSleeping && !a.inSettings {
+					resized := a.device.ResizeImage(frame)
+					_ = a.device.SetImage(keyIndex, resized)
+				}
+
+				// Per-frame delay: GIF delays are in centiseconds (×10 = ms).
+				delay := data.Delays[i]
+				if delay <= 0 {
+					delay = 10 // default 100ms if unset
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Duration(delay) * 10 * time.Millisecond):
+				}
+			}
+		}
+	}()
+}
+
+// stopAllGIFAnims cancels every running GIF animation goroutine.
+// Call this before navigating to a new page or on shutdown.
+func (a *App) stopAllGIFAnims() {
+	a.gifAnimsMu.Lock()
+	defer a.gifAnimsMu.Unlock()
+	for key, cancel := range a.gifAnims {
+		cancel()
+		delete(a.gifAnims, key)
+	}
 }
 
 // resetSleepTimer resets (or starts) the inactivity sleep timer.
@@ -388,6 +483,8 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 	}
 
 	if navigated {
+		// Cancel any running GIF animations before the new page renders.
+		a.stopAllGIFAnims()
 		// Clear visible scripts BEFORE render to prevent race condition
 		a.scriptMgr.SetVisibleScripts(nil)
 
@@ -455,6 +552,7 @@ func (a *App) updateVisibleScripts() {
 // Shutdown cleans up resources.
 // It shuts down the script manager, closes the device, and exits the Stream Deck library.
 func (a *App) Shutdown() {
+	a.stopAllGIFAnims()
 	if a.scriptMgr != nil {
 		a.scriptMgr.Shutdown()
 	}
