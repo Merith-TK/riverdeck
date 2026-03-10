@@ -171,30 +171,29 @@ func SaveConfig(config *Config, configPath string) error {
 }
 
 // getConfigPath determines the configuration path.
-// In development, it uses a relative path; in production, it would use user home.
-func getConfigPath() string {
-	// Check for .riverdeck directory in current path
-	if info, err := os.Stat(".riverdeck"); err == nil && info.IsDir() {
-		path := filepath.Join(".riverdeck", "interface", "streamdeck", "config")
-		if err := os.MkdirAll(path, 0755); err != nil {
-			// Log error or handle appropriately
-			return path // Still return path even if creation fails
-		}
-		return path
+// Priority order:
+// 1. --configdir flag (if provided)
+// 2. ./.riverdeck directory in current working directory
+// 3. ~/.riverdeck directory in user home
+func getConfigPath(configDir string) string {
+	// 1. Use --configdir if provided
+	if configDir != "" {
+		return configDir
 	}
 
-	// Fall back to ~/.riverdeck
+	// 2. Check for .riverdeck directory in current path
+	if info, err := os.Stat(".riverdeck"); err == nil && info.IsDir() {
+		return ".riverdeck"
+	}
+
+	// 3. Fall back to ~/.riverdeck
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		// Consider returning error or using a temp directory
-		return filepath.Join(".riverdeck", "interface", "streamdeck", "config")
+		return ".riverdeck"
 	}
 
-	path := filepath.Join(homeDir, ".riverdeck", "interface", "streamdeck", "config")
-	if err := os.MkdirAll(path, 0755); err != nil {
-		// Log error or handle appropriately
-	}
-	return path
+	return filepath.Join(homeDir, ".riverdeck")
 }
 
 // ensureConfigDir creates the configuration directory if it doesn't exist.

@@ -69,9 +69,9 @@ func NewApp() *App {
 // 6. Sets up key update callbacks and passive loops
 //
 // Returns an error if initialization fails at any step.
-func (a *App) Init() error {
+func (a *App) Init(configDir string) error {
 	// Determine config path first
-	configPath := getConfigPath()
+	configPath := getConfigPath(configDir)
 
 	// Ensure config directory exists
 	absConfigPath, err := ensureConfigDir(configPath)

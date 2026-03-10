@@ -1,16 +1,21 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/exec"
 )
 
+var configDir = flag.String("configdir", "", "Configuration directory path")
+
 func main() {
+	flag.Parse()
+
 	for {
 		app := NewApp()
 
-		if err := app.Init(); err != nil {
+		if err := app.Init(*configDir); err != nil {
 			log.Fatal(err)
 		}
 
