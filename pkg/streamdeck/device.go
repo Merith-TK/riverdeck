@@ -15,10 +15,11 @@ import (
 
 // Device represents an opened Stream Deck device.
 type Device struct {
-	hid   *hid.Device
-	Info  DeviceInfo
-	Model Model
-	mu    sync.Mutex // protects HID operations
+	hid     *hid.Device
+	Info    DeviceInfo
+	Model   Model
+	readMu  sync.Mutex // serialises HID reads  (ReadKeys / ReadWithTimeout)
+	writeMu sync.Mutex // serialises HID writes (writeImageData, feature reports)
 
 	// Performance settings
 	jpegQuality int
@@ -110,9 +111,12 @@ func OpenFirst() (*Device, error) {
 }
 
 // Close closes the device.
+// Acquires both readMu and writeMu to drain any in-flight HID operations first.
 func (d *Device) Close() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
+	d.readMu.Lock()
+	defer d.readMu.Unlock()
 	if d.hid != nil {
 		return d.hid.Close()
 	}
@@ -128,8 +132,8 @@ func (d *Device) SetBrightness(percent int) error {
 		percent = 100
 	}
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 
 	data := make([]byte, 32)
 	data[0] = 0x03
@@ -142,8 +146,8 @@ func (d *Device) SetBrightness(percent int) error {
 
 // Reset resets the Stream Deck to its default state.
 func (d *Device) Reset() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 
 	data := make([]byte, 32)
 	data[0] = 0x03
@@ -168,8 +172,8 @@ func (d *Device) SetImage(keyIndex int, img image.Image) error {
 		return err
 	}
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 	return d.writeImageData(keyIndex, imageData)
 }
 
@@ -192,8 +196,8 @@ func (d *Device) WriteKeyData(keyIndex int, imageData []byte) error {
 	if keyIndex < 0 || keyIndex >= d.Model.Keys {
 		return fmt.Errorf("key index %d out of range (0-%d)", keyIndex, d.Model.Keys-1)
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 	return d.writeImageData(keyIndex, imageData)
 }
 

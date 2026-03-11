@@ -48,6 +48,23 @@ func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
 		A: 255,
 	}
 
+	// Pre-encode every frame to its final HID-ready bytes once, up front.
+	// This moves the JPEG encode + resize cost out of the hot animation loop
+	// so that playback is just raw HID writes.
+	preEncoded := make([][]byte, len(data.Frames))
+	for i, frame := range data.Frames {
+		resized := a.device.ResizeImage(frame)
+		if text != "" {
+			resized = a.nav.RenderTextOnImage(resized, text, textColor)
+		}
+		enc, err := a.device.EncodeKeyImage(resized)
+		if err != nil {
+			log.Printf("GIF pre-encode frame %d for key %d: %v", i, keyIndex, err)
+			return
+		}
+		preEncoded[i] = enc
+	}
+
 	// Cancel any existing animation for this key.
 	a.gifAnimsMu.Lock()
 	if cancel, ok := a.gifAnims[keyIndex]; ok {
@@ -64,7 +81,7 @@ func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
 		// encoded rate.
 		frameTarget := time.Now()
 		for {
-			for i, frame := range data.Frames {
+			for i := range data.Frames {
 				select {
 				case <-ctx.Done():
 					return
@@ -76,12 +93,8 @@ func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
 				isSleeping := a.sleeping
 				a.sleepMu.Unlock()
 				if !isSleeping && !a.inSettings {
-					resized := a.device.ResizeImage(frame)
-					// Overlay text on the GIF frame when the script specifies it.
-					if text != "" {
-						resized = a.nav.RenderTextOnImage(resized, text, textColor)
-					}
-					_ = a.device.SetImage(keyIndex, resized)
+					// Frame is already encoded; just write the raw HID bytes.
+					_ = a.device.WriteKeyData(keyIndex, preEncoded[i])
 				}
 
 				// Per-frame delay: GIF delays are in centiseconds (x10 = ms).

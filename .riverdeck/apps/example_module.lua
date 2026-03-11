@@ -46,7 +46,7 @@ local color       = {255, 0, 255} -- Magenta
 function script.background(state)
     while true do
         -- Log a heartbeat so you can verify background is running
-        log.debug("background tick, clicks=" .. click_count)
+        -- log.debug("background tick, clicks=" .. click_count)
         system.sleep(5000)  -- yield for 5 seconds
     end
 end

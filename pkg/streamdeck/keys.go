@@ -8,8 +8,8 @@ import (
 // ReadKeys reads the current state of all keys.
 // Returns a slice of booleans where true means the key is pressed.
 func (d *Device) ReadKeys() ([]bool, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.readMu.Lock()
+	defer d.readMu.Unlock()
 
 	// Read buffer size depends on device, use generous buffer
 	buf := make([]byte, 512)
