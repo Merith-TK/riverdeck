@@ -9,11 +9,11 @@ import (
 
 // StreamDeckModule exposes Stream Deck hardware control to Lua scripts.
 type StreamDeckModule struct {
-	device *streamdeck.Device
+	device streamdeck.DeviceIface
 }
 
 // NewStreamDeckModule creates a new StreamDeck module bound to a device.
-func NewStreamDeckModule(device *streamdeck.Device) *StreamDeckModule {
+func NewStreamDeckModule(device streamdeck.DeviceIface) *StreamDeckModule {
 	return &StreamDeckModule{device: device}
 }
 
@@ -135,7 +135,7 @@ func (m *StreamDeckModule) sdGetModel(L *lua.LState) int {
 		L.Push(lua.LNil)
 		return 1
 	}
-	L.Push(lua.LString(m.device.Model.Name))
+	L.Push(lua.LString(m.device.ModelName()))
 	return 1
 }
 
@@ -146,7 +146,7 @@ func (m *StreamDeckModule) sdGetKeys(L *lua.LState) int {
 		L.Push(lua.LNumber(0))
 		return 1
 	}
-	L.Push(lua.LNumber(m.device.Model.Keys))
+	L.Push(lua.LNumber(m.device.Keys()))
 	return 1
 }
 
@@ -158,7 +158,7 @@ func (m *StreamDeckModule) sdGetLayout(L *lua.LState) int {
 		L.Push(lua.LNumber(0))
 		return 2
 	}
-	L.Push(lua.LNumber(m.device.Model.Cols))
-	L.Push(lua.LNumber(m.device.Model.Rows))
+	L.Push(lua.LNumber(m.device.Cols()))
+	L.Push(lua.LNumber(m.device.Rows()))
 	return 2
 }

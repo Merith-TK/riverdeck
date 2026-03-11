@@ -79,7 +79,7 @@ func (a *App) renderSettingsPage() {
 	contentKeys := a.nav.GetContentKeys()
 
 	// Black-out all keys first via the device's clear helper, then paint ours.
-	totalKeys := a.device.Model.Keys
+	totalKeys := a.device.Keys()
 	for i := 0; i < totalKeys; i++ {
 		a.device.SetKeyColor(i, color.RGBA{0, 0, 0, 255})
 	}

@@ -46,6 +46,7 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+testdata/
 
 # Configuration that might contain sensitive data
 # Uncomment if .riverdeck contains user-specific config

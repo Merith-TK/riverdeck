@@ -130,3 +130,13 @@ func (d *Device) Keys() int {
 func (d *Device) PixelSize() int {
 	return d.Model.PixelSize
 }
+
+// ModelName returns the human-readable name of the device model.
+func (d *Device) ModelName() string {
+	return d.Model.Name
+}
+
+// GetInfo returns the DeviceInfo for this device.
+func (d *Device) GetInfo() DeviceInfo {
+	return d.Info
+}

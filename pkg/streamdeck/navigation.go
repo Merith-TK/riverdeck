@@ -49,7 +49,7 @@ const (
 
 // Navigator manages folder-based navigation on a Stream Deck.
 type Navigator struct {
-	dev          *Device
+	dev          DeviceIface
 	rootPath     string
 	currentDir   string
 	pageIndex    int
@@ -62,7 +62,7 @@ type Navigator struct {
 }
 
 // NewNavigator creates a new navigator for the given device and root config path.
-func NewNavigator(dev *Device, rootPath string) *Navigator {
+func NewNavigator(dev DeviceIface, rootPath string) *Navigator {
 	n := &Navigator{
 		dev:        dev,
 		rootPath:   rootPath,
@@ -304,7 +304,7 @@ func (n *Navigator) RenderPage() error {
 		return err
 	}
 
-	totalKeys := n.dev.Model.Keys
+	totalKeys := n.dev.Keys()
 	type keyFrame struct {
 		index int
 		data  []byte

@@ -40,7 +40,7 @@ const (
 type ScriptManager struct {
 	mu sync.RWMutex
 
-	device     *streamdeck.Device
+	device     streamdeck.DeviceIface
 	configDir  string
 	passiveFPS int
 
@@ -92,7 +92,7 @@ type ScriptManager struct {
 }
 
 // NewScriptManager creates a new script manager.
-func NewScriptManager(dev *streamdeck.Device, configDir string, passiveFPS int) *ScriptManager {
+func NewScriptManager(dev streamdeck.DeviceIface, configDir string, passiveFPS int) *ScriptManager {
 	if passiveFPS <= 0 {
 		passiveFPS = DefaultPassiveFPS
 	}

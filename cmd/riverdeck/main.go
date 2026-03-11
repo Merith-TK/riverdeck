@@ -8,6 +8,7 @@ import (
 )
 
 var configDir = flag.String("configdir", "", "Configuration directory path")
+var simAddr = flag.String("sim", "", "Connect to riverdeck-simulator at host:port instead of real hardware")
 
 func main() {
 	flag.Parse()
@@ -15,7 +16,7 @@ func main() {
 	for {
 		app := NewApp()
 
-		if err := app.Init(*configDir); err != nil {
+		if err := app.Init(*configDir, *simAddr); err != nil {
 			log.Fatal(err)
 		}
 

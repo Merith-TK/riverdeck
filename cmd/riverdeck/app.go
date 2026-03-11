@@ -35,7 +35,8 @@ import (
 
 // App represents the main application.
 type App struct {
-	device     *streamdeck.Device
+	device     streamdeck.DeviceIface
+	simMode    bool // true when connected to simulator (no HID init)
 	scriptMgr  *scripting.ScriptManager
 	nav        *streamdeck.Navigator
 	config     *Config
@@ -82,14 +83,17 @@ func NewApp() *App {
 // Init initializes the application, including device discovery and setup.
 // It performs the following steps:
 // 1. Initializes the Stream Deck library
-// 2. Enumerates available devices and selects the first one
+// 2. Enumerates available devices (or connects to a simulator)
 // 3. Opens the device and sets initial brightness
 // 4. Creates the config directory structure
 // 5. Initializes the script manager and navigator
 // 6. Sets up key update callbacks and passive loops
 //
+// When simAddr is non-empty ("host:port") the app connects to a running
+// riverdeck-simulator instance instead of opening real HID hardware.
+//
 // Returns an error if initialization fails at any step.
-func (a *App) Init(configDir string) error {
+func (a *App) Init(configDir string, simAddr string) error {
 	// Resolve the single canonical config directory.
 	dir := ConfigDir(configDir)
 	absDir, err := filepath.Abs(dir)
@@ -109,44 +113,59 @@ func (a *App) Init(configDir string) error {
 	fmt.Printf("\n[*] Config directory: %s\n", absDir)
 	fmt.Printf("[*] Configuration loaded\n")
 
-	// Initialize the streamdeck library
-	if err := streamdeck.Init(); err != nil {
-		return fmt.Errorf("failed to init streamdeck: %w", err)
-	}
+	// Open device: real hardware or simulator.
+	var dev streamdeck.DeviceIface
+	if simAddr != "" {
+		fmt.Printf("\n[*] Simulator mode: connecting to %s ...\n", simAddr)
+		sc, err := streamdeck.ConnectSim(simAddr)
+		if err != nil {
+			return fmt.Errorf("failed to connect to simulator: %w", err)
+		}
+		dev = sc
+		a.simMode = true
+		fmt.Printf("[*] Simulator ready: %s (%dx%d, %d keys)\n",
+			sc.ModelName(), sc.Cols(), sc.Rows(), sc.Keys())
+	} else {
+		// Initialize the streamdeck library
+		if err := streamdeck.Init(); err != nil {
+			return fmt.Errorf("failed to init streamdeck: %w", err)
+		}
 
-	// Probe for all Stream Deck devices
-	fmt.Println("\n[*] Scanning for Stream Deck devices...")
+		// Probe for all Stream Deck devices
+		fmt.Println("\n[*] Scanning for Stream Deck devices...")
 
-	devices, err := streamdeck.Enumerate()
-	if err != nil {
-		return fmt.Errorf("failed to enumerate devices: %w", err)
-	}
+		devices, err := streamdeck.Enumerate()
+		if err != nil {
+			return fmt.Errorf("failed to enumerate devices: %w", err)
+		}
 
-	if len(devices) == 0 {
-		fmt.Println("No Stream Deck devices found.")
-		return fmt.Errorf("no devices found")
-	}
+		if len(devices) == 0 {
+			fmt.Println("No Stream Deck devices found.")
+			return fmt.Errorf("no devices found")
+		}
 
-	fmt.Printf("Found %d Stream Deck device(s):\n\n", len(devices))
+		fmt.Printf("Found %d Stream Deck device(s):\n\n", len(devices))
 
-	for i, info := range devices {
-		fmt.Printf("Device #%d:\n", i+1)
-		streamdeck.PrintDeviceInfo(info)
-		fmt.Println()
-	}
+		for i, info := range devices {
+			fmt.Printf("Device #%d:\n", i+1)
+			streamdeck.PrintDeviceInfo(info)
+			fmt.Println()
+		}
 
-	// Use the first device
-	info := devices[0]
-	if info.Model.PixelSize == 0 {
-		fmt.Println("First device has no display (e.g., Pedal). Skipping.")
-		return fmt.Errorf("device has no display")
-	}
+		// Use the first device
+		info := devices[0]
+		if info.Model.PixelSize == 0 {
+			fmt.Println("First device has no display (e.g., Pedal). Skipping.")
+			return fmt.Errorf("device has no display")
+		}
 
-	fmt.Printf("Opening %s...\n", info.Model.Name)
+		fmt.Printf("Opening %s...\n", info.Model.Name)
 
-	dev, err := streamdeck.OpenWithConfig(info.Path, a.config.Performance.JPEGQuality)
-	if err != nil {
-		return fmt.Errorf("failed to open device: %w", err)
+		hwDev, err := streamdeck.OpenWithConfig(info.Path, a.config.Performance.JPEGQuality)
+		if err != nil {
+			return fmt.Errorf("failed to open device: %w", err)
+		}
+		dev = hwDev
 	}
 	a.device = dev
 
@@ -523,7 +542,7 @@ func (a *App) handleBackHoldChange(held bool) {
 func (a *App) triggerEmergencyExit() {
 	fmt.Println("\n[!!!] EMERGENCY EXIT: corners+center combo detected -- killing process")
 	// Flash all keys red as a visible kill indicator.
-	for i := 0; i < a.device.Model.Keys; i++ {
+	for i := 0; i < a.device.Keys(); i++ {
 		_ = a.device.SetKeyColor(i, color.RGBA{255, 0, 0, 255})
 	}
 	time.Sleep(300 * time.Millisecond)
@@ -548,5 +567,7 @@ func (a *App) Shutdown() {
 		_ = a.device.Clear()
 		a.device.Close()
 	}
-	streamdeck.Exit()
+	if !a.simMode {
+		streamdeck.Exit()
+	}
 }

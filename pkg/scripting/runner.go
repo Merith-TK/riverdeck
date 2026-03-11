@@ -115,7 +115,7 @@ type ScriptRunner struct {
 	bgFunc         *lua.LFunction // Cached background function
 
 	// Device access
-	device    *streamdeck.Device
+	device    streamdeck.DeviceIface
 	configDir string
 
 	// Package library search paths (from .packages/*/lib/) and cross-script store.
@@ -152,7 +152,7 @@ type ScriptRunner struct {
 // packageDataDir is the absolute path to the package's data/ directory.
 // When non-empty the pkg_data module is preloaded and scoped to that directory.
 // Pass an empty string for normal button/directory scripts.
-func NewScriptRunner(scriptPath string, dev *streamdeck.Device, configDir string, packageLibPaths []string, store *modules.StoreModule, packageDataDir string) (*ScriptRunner, error) {
+func NewScriptRunner(scriptPath string, dev streamdeck.DeviceIface, configDir string, packageLibPaths []string, store *modules.StoreModule, packageDataDir string) (*ScriptRunner, error) {
 	r := &ScriptRunner{
 		ScriptPath:      scriptPath,
 		ScriptName:      filepath.Base(scriptPath[:len(scriptPath)-4]), // Remove .lua
