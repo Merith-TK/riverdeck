@@ -1,0 +1,44 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#2b2f3a"/>
+<stop offset="100%" stop-color="#1a1d24"/>
+</linearGradient>
+
+<linearGradient id="river" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#3ee7a5"/>
+<stop offset="100%" stop-color="#39b9ff"/>
+</linearGradient>
+
+<linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#ffffff33"/>
+<stop offset="100%" stop-color="#ffffff00"/>
+</linearGradient>
+</defs>
+
+<rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg)"/>
+
+<!-- grid -->
+<g fill="#3a3f4c">
+<rect x="50" y="50" width="40" height="40" rx="8"/>
+<rect x="108" y="50" width="40" height="40" rx="8"/>
+<rect x="166" y="50" width="40" height="40" rx="8"/>
+
+<rect x="50" y="108" width="40" height="40" rx="8"/>
+<rect x="108" y="108" width="40" height="40" rx="8"/>
+<rect x="166" y="108" width="40" height="40" rx="8"/>
+
+<rect x="50" y="166" width="40" height="40" rx="8"/>
+<rect x="108" y="166" width="40" height="40" rx="8"/>
+<rect x="166" y="166" width="40" height="40" rx="8"/>
+</g>
+
+<!-- river -->
+<!-- <path d="M30 180 C80 140, 140 200, 220 80"
+stroke="url(#river)" stroke-width="14" fill="none" stroke-linecap="round"/> -->
+
+<!-- gloss -->
+<rect x="8" y="8" width="240" height="120" rx="48" fill="url(#gloss)"/>
+
+</svg>
