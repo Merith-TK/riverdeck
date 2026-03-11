@@ -16,11 +16,13 @@ func RegisterTime(L *lua.LState) {
 func timeLoader(L *lua.LState) int {
 	mod := L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{
 		"now":       timeNow,
+		"millis":    timeMillis,
 		"timestamp": timeTimestamp,
 		"format":    timeFormat,
 		"parse":     timeParse,
 		"date":      timeDate,
 		"sleep":     timeSleep,
+		"since":     timeSince,
 	})
 	L.Push(mod)
 	return 1
@@ -33,7 +35,15 @@ func timeNow(L *lua.LState) int {
 	return 1
 }
 
-// timeTimestamp is an alias for time.now().
+// timeMillis returns the current Unix timestamp in milliseconds.
+// Useful for high-resolution timing (animations, polling intervals).
+// Lua: time.millis() -> number
+func timeMillis(L *lua.LState) int {
+	L.Push(lua.LNumber(time.Now().UnixMilli()))
+	return 1
+}
+
+// timeTimestamp is an alias for time.now() (kept for backwards compatibility).
 // Lua: time.timestamp() -> number
 func timeTimestamp(L *lua.LState) int {
 	L.Push(lua.LNumber(time.Now().Unix()))
@@ -91,4 +101,13 @@ func timeDate(L *lua.LState) int {
 func timeSleep(L *lua.LState) int {
 	time.Sleep(time.Duration(L.CheckNumber(1)) * time.Millisecond)
 	return 0
+}
+
+// timeSince returns the number of seconds elapsed since the given Unix timestamp.
+// Lua: time.since(timestamp) -> number
+func timeSince(L *lua.LState) int {
+	ts := int64(L.CheckNumber(1))
+	elapsed := time.Since(time.Unix(ts, 0)).Seconds()
+	L.Push(lua.LNumber(elapsed))
+	return 1
 }

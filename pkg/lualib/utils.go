@@ -17,6 +17,8 @@ func utilsLoader(L *lua.LState) int {
 		"contains": utilsContains,
 		"size":     utilsSize,
 		"merge":    utilsMerge,
+		"keys":     utilsKeys,
+		"type":     utilsType,
 	})
 	L.Push(mod)
 	return 1
@@ -81,5 +83,26 @@ func utilsMerge(L *lua.LState) int {
 		result.RawSet(k, v)
 	})
 	L.Push(result)
+	return 1
+}
+
+// utilsKeys returns a sequential table of all keys in tbl.
+// Lua: utils.keys(t) -> table
+func utilsKeys(L *lua.LState) int {
+	tbl := L.CheckTable(1)
+	keys := L.NewTable()
+	i := 1
+	tbl.ForEach(func(k, _ lua.LValue) {
+		keys.RawSetInt(i, k)
+		i++
+	})
+	L.Push(keys)
+	return 1
+}
+
+// utilsType returns the Lua type name of a value as a string.
+// Lua: utils.type(val) -> "string"|"number"|"boolean"|"table"|"nil"|"function"
+func utilsType(L *lua.LState) int {
+	L.Push(lua.LString(L.CheckAny(1).Type().String()))
 	return 1
 }

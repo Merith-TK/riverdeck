@@ -241,11 +241,7 @@ func (r *ScriptRunner) registerModules() {
 	r.L.PreloadModule("file", fileMod.Loader)
 
 	// Go-native stdlib (lualib) - zero disk I/O on require()
-	lualib.RegisterUtils(r.L)
-	lualib.RegisterStrings(r.L)
-	lualib.RegisterJSON(r.L)
-	lualib.RegisterTime(r.L)
-	lualib.RegisterLog(r.L)
+	lualib.RegisterAll(r.L)
 
 	// Register the shared cross-script store if one was provided.
 	if r.store != nil {
