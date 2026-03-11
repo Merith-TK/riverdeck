@@ -169,20 +169,35 @@ func (a *App) Init(configDir string, simAddr string) error {
 	}
 	a.device = dev
 
-	// Compute the emergency kill combo: all 4 corners + center.
-	// Works for any device geometry (MK.2: keys 0, 4, 7, 10, 14).
+	// Compute the emergency kill combo from device geometry.
+	// Use all 4 corners + center, deduplicated (small devices may share keys).
+	// Require at least 3 distinct keys to form a meaningful combo.
 	{
 		cols := dev.Cols()
 		rows := dev.Rows()
-		center := (rows/2)*cols + (cols / 2)
-		a.panicCombo = []int{
-			0,                 // top-left corner
-			cols - 1,          // top-right corner
-			center,            // center
-			(rows - 1) * cols, // bottom-left corner
-			rows*cols - 1,     // bottom-right corner
+		centerRow := rows / 2
+		centerCol := cols / 2
+		candidates := []int{
+			0,                          // top-left
+			cols - 1,                   // top-right
+			centerRow*cols + centerCol, // center
+			(rows - 1) * cols,          // bottom-left
+			rows*cols - 1,              // bottom-right
 		}
-		log.Printf("[*] Emergency kill combo: keys %v", a.panicCombo)
+		seen := make(map[int]bool)
+		for _, k := range candidates {
+			if !seen[k] {
+				seen[k] = true
+				a.panicCombo = append(a.panicCombo, k)
+			}
+		}
+		if len(a.panicCombo) < 3 {
+			// Device too small for a safe combo -- disable it.
+			a.panicCombo = nil
+			log.Printf("[*] Emergency kill combo: disabled (device too small)")
+		} else {
+			log.Printf("[*] Emergency kill combo: keys %v", a.panicCombo)
+		}
 	}
 
 	// Set brightness from config
