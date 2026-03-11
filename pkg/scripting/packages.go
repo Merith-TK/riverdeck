@@ -29,7 +29,7 @@ package scripting
 //	}
 //
 // A package without manifest.json is still valid as long as it contains a lib/
-// subdirectory — the directory name is used as the package ID.
+// subdirectory -- the directory name is used as the package ID.
 //
 // Scripts in any directory can then use:
 //
@@ -111,7 +111,7 @@ type ScannedPackage struct {
 //
 // A missing .packages/ directory is silently ignored (nil, nil is returned).
 // Individual packages with unreadable or malformed manifest.json are logged and
-// still included — the lib/ directory can still be found without a manifest.
+// still included -- the lib/ directory can still be found without a manifest.
 func ScanPackages(configDir string) ([]*ScannedPackage, error) {
 	packagesDir := filepath.Join(configDir, ".packages")
 

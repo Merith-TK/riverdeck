@@ -66,7 +66,7 @@ func (m *StoreModule) Loader(L *lua.LState) int {
 }
 
 // storeGet retrieves a value by key.
-// Lua: local v = store.get("key")  →  string|number|boolean|nil
+// Lua: local v = store.get("key")  ->  string|number|boolean|nil
 func (m *StoreModule) storeGet(L *lua.LState) int {
 	key := L.CheckString(1)
 	val, ok := m.data.Load(key)

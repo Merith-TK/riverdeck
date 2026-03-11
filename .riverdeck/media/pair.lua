@@ -9,15 +9,15 @@
 -- Button states (passive display):
 --
 --   PAIR     red/orange  No token saved.  Press to begin pairing.
---   PAIRING  yellow      Waiting for user to approve in YTM Desktop (≤30s).
+--   PAIRING  yellow      Waiting for user to approve in YTM Desktop (<=30s).
 --   OFFLINE  grey        Token exists but YTM Desktop is not currently running.
 --   REVOKED  orange      YTM Desktop rejected the token (settings reset, etc.).
 --                        Press to re-pair.
---   ✓ YTM   dim green   Connected and polling.  Press to force a re-pair.
+--   v YTM   dim green   Connected and polling.  Press to force a re-pair.
 --
 -- Trigger behaviour:
---   - While PAIRING  → no-op (already waiting, nothing to do)
---   - Any other state → calls ytm.request_pair() which signals the daemon
+--   - While PAIRING  -> no-op (already waiting, nothing to do)
+--   - Any other state -> calls ytm.request_pair() which signals the daemon
 
 local ytm = require('ytm')
 

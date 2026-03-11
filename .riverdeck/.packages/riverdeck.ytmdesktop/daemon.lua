@@ -78,7 +78,7 @@ end
 
 -- -- Pairing -------------------------------------------------------------------
 
--- do_pair: run the full requestcode → request authentication flow.
+-- do_pair: run the full requestcode -> request authentication flow.
 -- Only called when the pair button sets ytm._pair_request = true.
 -- Returns the token string on success, or nil on failure.
 local function do_pair()
@@ -100,7 +100,7 @@ local function do_pair()
     local code = res.code
     log.info("[ytm] ┌---------------------------------------------------------┐")
     log.info("[ytm] │  YTM Desktop pairing request sent.                      │")
-    log.info("[ytm] │  Open YTM Desktop → Settings → Integrations             │")
+    log.info("[ytm] │  Open YTM Desktop -> Settings -> Integrations             │")
     log.info("[ytm] │  and APPROVE the connection for \"" .. APP_NAME .. "\".  │")
     log.info("[ytm] │  You have 30 seconds.                                   │")
     log.info("[ytm] └---------------------------------------------------------┘")

@@ -150,7 +150,7 @@ func LoadConfig(dir string) (*Config, error) {
 	cfg := DefaultConfig()
 	data, err := os.ReadFile(filepath.Join(dir, "config.yml"))
 	if os.IsNotExist(err) {
-		// First run — write defaults so the user has a file to edit.
+		// First run -- write defaults so the user has a file to edit.
 		if werr := SaveConfig(cfg, dir); werr != nil {
 			return cfg, fmt.Errorf("failed to write default config: %w", werr)
 		}

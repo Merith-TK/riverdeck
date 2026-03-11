@@ -21,8 +21,8 @@ package modules
 //	local ok,  err = d.append("log.txt",    "line\n")
 //
 //	-- JSON helpers
-//	local tbl, err = d.json_read("auth.json")         -- decode file → table
-//	local ok,  err = d.json_write("auth.json", tbl)   -- encode table → file
+//	local tbl, err = d.json_read("auth.json")         -- decode file -> table
+//	local ok,  err = d.json_write("auth.json", tbl)   -- encode table -> file
 //
 //	-- Queries
 //	local exists     = d.exists("auth.json")           -- bool
@@ -104,7 +104,7 @@ func (m *PackageDataModule) resolve(rel string) (string, error) {
 
 // -- File I/O ------------------------------------------------------------------
 
-// read(file) → string|nil, err|nil
+// read(file) -> string|nil, err|nil
 func (m *PackageDataModule) read(L *lua.LState) int {
 	rel := L.CheckString(1)
 	abs, err := m.resolve(rel)
@@ -124,7 +124,7 @@ func (m *PackageDataModule) read(L *lua.LState) int {
 	return 2
 }
 
-// write(file, content) → ok, err|nil
+// write(file, content) -> ok, err|nil
 func (m *PackageDataModule) write(L *lua.LState) int {
 	rel := L.CheckString(1)
 	content := L.CheckString(2)
@@ -150,7 +150,7 @@ func (m *PackageDataModule) write(L *lua.LState) int {
 	return 2
 }
 
-// append(file, content) → ok, err|nil
+// append(file, content) -> ok, err|nil
 func (m *PackageDataModule) appendFile(L *lua.LState) int {
 	rel := L.CheckString(1)
 	content := L.CheckString(2)
@@ -184,7 +184,7 @@ func (m *PackageDataModule) appendFile(L *lua.LState) int {
 
 // -- JSON helpers --------------------------------------------------------------
 
-// json_read(file) → table|nil, err|nil
+// json_read(file) -> table|nil, err|nil
 func (m *PackageDataModule) jsonRead(L *lua.LState) int {
 	rel := L.CheckString(1)
 	abs, err := m.resolve(rel)
@@ -210,7 +210,7 @@ func (m *PackageDataModule) jsonRead(L *lua.LState) int {
 	return 2
 }
 
-// json_write(file, table) → ok, err|nil
+// json_write(file, table) -> ok, err|nil
 func (m *PackageDataModule) jsonWrite(L *lua.LState) int {
 	rel := L.CheckString(1)
 	val := L.CheckAny(2)
@@ -244,7 +244,7 @@ func (m *PackageDataModule) jsonWrite(L *lua.LState) int {
 
 // -- Queries -------------------------------------------------------------------
 
-// exists(file) → bool
+// exists(file) -> bool
 func (m *PackageDataModule) exists(L *lua.LState) int {
 	rel := L.CheckString(1)
 	abs, err := m.resolve(rel)
@@ -257,7 +257,7 @@ func (m *PackageDataModule) exists(L *lua.LState) int {
 	return 1
 }
 
-// is_dir(path) → bool
+// is_dir(path) -> bool
 func (m *PackageDataModule) isDir(L *lua.LState) int {
 	rel := L.CheckString(1)
 	abs, err := m.resolve(rel)
@@ -270,7 +270,7 @@ func (m *PackageDataModule) isDir(L *lua.LState) int {
 	return 1
 }
 
-// list([subdir]) → table|nil, err|nil    — returns array of entry names
+// list([subdir]) -> table|nil, err|nil    -- returns array of entry names
 func (m *PackageDataModule) list(L *lua.LState) int {
 	rel := L.OptString(1, "")
 	abs, err := m.resolve(rel)
@@ -294,7 +294,7 @@ func (m *PackageDataModule) list(L *lua.LState) int {
 	return 2
 }
 
-// mkdir(subdir) → ok, err|nil
+// mkdir(subdir) -> ok, err|nil
 func (m *PackageDataModule) mkdir(L *lua.LState) int {
 	rel := L.CheckString(1)
 	abs, err := m.resolve(rel)
@@ -313,7 +313,7 @@ func (m *PackageDataModule) mkdir(L *lua.LState) int {
 	return 2
 }
 
-// remove(file) → ok, err|nil
+// remove(file) -> ok, err|nil
 func (m *PackageDataModule) remove(L *lua.LState) int {
 	rel := L.CheckString(1)
 	abs, err := m.resolve(rel)
@@ -332,7 +332,7 @@ func (m *PackageDataModule) remove(L *lua.LState) int {
 	return 2
 }
 
-// path([rel]) → string
+// path([rel]) -> string
 func (m *PackageDataModule) path(L *lua.LState) int {
 	rel := L.OptString(1, "")
 	if rel == "" {

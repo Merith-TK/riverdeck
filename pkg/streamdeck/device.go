@@ -187,7 +187,7 @@ func (d *Device) EncodeKeyImage(img image.Image) ([]byte, error) {
 }
 
 // WriteKeyData writes pre-encoded image bytes to a key with the HID lock held.
-// Pair with EncodeKeyImage for parallel encode → serial write patterns.
+// Pair with EncodeKeyImage for parallel encode -> serial write patterns.
 func (d *Device) WriteKeyData(keyIndex int, imageData []byte) error {
 	if keyIndex < 0 || keyIndex >= d.Model.Keys {
 		return fmt.Errorf("key index %d out of range (0-%d)", keyIndex, d.Model.Keys-1)

@@ -43,7 +43,7 @@ end
 function M.trigger(key, state)
     if not ytm.connected() then return end
     local ls = ytm.track().like_status
-    -- If disliked, clear it first so we arrive at Indifferent → then Like.
+    -- If disliked, clear it first so we arrive at Indifferent -> then Like.
     if ls == 0 then ytm.dislike() end
     ytm.like()
 end

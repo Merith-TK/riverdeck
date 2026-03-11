@@ -580,7 +580,7 @@ func (m *ScriptManager) RefreshScript(scriptPath string) {
 func (m *ScriptManager) requestRefresh() {
 	select {
 	case m.refreshCh <- struct{}{}:
-	default: // already a signal pending—don't block
+	default: // already a signal pending--don't block
 	}
 }
 

@@ -1,6 +1,6 @@
 package main
 
-// sleep.go — display sleep/wake timeout management.
+// sleep.go -- display sleep/wake timeout management.
 //
 // Extracted from app.go for clarity. All methods operate on *App.
 

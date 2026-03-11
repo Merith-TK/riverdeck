@@ -91,7 +91,7 @@ type CapturedKeyEvent struct {
 	PacketHex  string `json:"packet_hex"` // raw packet that triggered this event
 }
 
-// curated list of feature report IDs to always probe (firmware, serial, brightness…)
+// curated list of feature report IDs to always probe (firmware, serial, brightness...)
 var curatedReportIDs = []byte{
 	0x00, 0x01, 0x02, 0x03, 0x04,
 	0x05, // firmware version (V2/MK.2)
@@ -155,7 +155,7 @@ func ProbeDevice(raw hid.DeviceInfo, listenDur time.Duration, allReports bool) P
 		}
 		if err != nil {
 			// "parameter is incorrect" (Windows error 0x57) means the report ID
-			// simply does not exist on this device — not a real error.
+			// simply does not exist on this device -- not a real error.
 			if isUnsupportedReportErr(err) {
 				res.Unsupported = true
 			} else {
@@ -235,15 +235,15 @@ func probeKeyPacket(dev *hid.Device) *KeyPacketInfo {
 //
 // Known formats:
 //
-//	"V2" – 01 00 NN 00 [keys…]  (MK.2 / V2 / XL)  offset=4, NN=key count
-//	"V1" – 01 [keys…]              (Original / Mini)  offset=1, scan for key count
+//	"V2" - 01 00 NN 00 [keys...]  (MK.2 / V2 / XL)  offset=4, NN=key count
+//	"V1" - 01 [keys...]              (Original / Mini)  offset=1, scan for key count
 func detectKeyFormat(pkt []byte) (format string, keyOffset int, keyCount int) {
 	if len(pkt) < 2 || pkt[0] != 0x01 {
 		return "unknown", 0, 0
 	}
 
-	// V2: 01 00 NN 00 [keys…]
-	// NN is the key count embedded in the header, must be plausible (1–64).
+	// V2: 01 00 NN 00 [keys...]
+	// NN is the key count embedded in the header, must be plausible (1-64).
 	if len(pkt) >= 5 && pkt[1] == 0x00 && pkt[3] == 0x00 {
 		nn := int(pkt[2])
 		if nn >= 1 && nn <= 64 {
@@ -251,7 +251,7 @@ func detectKeyFormat(pkt []byte) (format string, keyOffset int, keyCount int) {
 		}
 	}
 
-	// V1: 01 [keys…]
+	// V1: 01 [keys...]
 	// Count consecutive bytes that are 0x00 or 0x01 starting at offset 1.
 	count := 0
 	for _, b := range pkt[1:] {
@@ -339,7 +339,7 @@ func extractFirmware(data []byte) string {
 }
 
 // isUnsupportedReportErr returns true when the error is simply "report ID not
-// supported by this device" — on Windows this surfaces as error 0x57
+// supported by this device" -- on Windows this surfaces as error 0x57
 // "The parameter is incorrect".
 func isUnsupportedReportErr(err error) bool {
 	s := strings.ToLower(err.Error())

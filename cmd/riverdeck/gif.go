@@ -1,6 +1,6 @@
 package main
 
-// gif.go — GIF animation management for per-key animated images.
+// gif.go -- GIF animation management for per-key animated images.
 //
 // Extracted from app.go for clarity. All methods operate on *App.
 
@@ -84,7 +84,7 @@ func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
 					_ = a.device.SetImage(keyIndex, resized)
 				}
 
-				// Per-frame delay: GIF delays are in centiseconds (×10 = ms).
+				// Per-frame delay: GIF delays are in centiseconds (x10 = ms).
 				// Default to 1 centisecond (10 ms) when the frame has no delay
 				// so that fast/untagged GIFs play at their intended speed.
 				delay := 1
@@ -100,7 +100,7 @@ func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
 					case <-time.After(sleepFor):
 					}
 				} else {
-					// We're running behind – yield briefly and continue.
+					// We're running behind - yield briefly and continue.
 					select {
 					case <-ctx.Done():
 						return

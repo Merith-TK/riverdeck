@@ -10,9 +10,9 @@ import (
 // RegisterMath preloads the "mathx" module into the given Lua state.
 // Lua scripts access it via: local mathx = require("mathx")
 //
-// Provides clamp, round, and lerp — the three useful math functions that
+// Provides clamp, round, and lerp -- the three useful math functions that
 // gopher-lua's built-in math library does not include. For everything else
-// (floor, ceil, abs, min, max, sin, cos, sqrt, random, pi, huge, …) use
+// (floor, ceil, abs, min, max, sin, cos, sqrt, random, pi, huge, ...) use
 // the built-in math global directly.
 func RegisterMath(L *lua.LState) {
 	L.PreloadModule("mathx", mathLoader)

@@ -5,13 +5,13 @@ import (
 	"strings"
 )
 
-const divider = "════════════════════════════════════════════════════════════════"
+const divider = "================================================================"
 const thinLine = "----------------------------------------------------------------"
 
 // PrintReport prints a human-readable diagnostic report for one probed device.
 func PrintReport(r ProbeResult) {
 	fmt.Println(divider)
-	fmt.Printf("  DEVICE PROBE REPORT — %s\n", r.ProbeTime)
+	fmt.Printf("  DEVICE PROBE REPORT -- %s\n", r.ProbeTime)
 	fmt.Println(thinLine)
 
 	// -- Identity --------------------------------------------------------------
@@ -28,18 +28,18 @@ func PrintReport(r ProbeResult) {
 	fmt.Println("  [Model]")
 	knownStr := "YES"
 	if !r.KnownModel {
-		knownStr = "NO — unknown hardware (all values below may be zero/empty)"
+		knownStr = "NO -- unknown hardware (all values below may be zero/empty)"
 	}
 	fmt.Printf("    Known Model  : %s\n", knownStr)
 	fmt.Printf("    Model Name   : %s\n", r.ModelName)
 	if r.Cols > 0 || r.Rows > 0 {
-		fmt.Printf("    Layout       : %d cols × %d rows\n", r.Cols, r.Rows)
+		fmt.Printf("    Layout       : %d cols x %d rows\n", r.Cols, r.Rows)
 	} else {
 		fmt.Printf("    Layout       : unknown\n")
 	}
 	fmt.Printf("    Key Count    : %d\n", r.Keys)
 	if r.PixelSize > 0 {
-		fmt.Printf("    Pixel Size   : %d × %d px\n", r.PixelSize, r.PixelSize)
+		fmt.Printf("    Pixel Size   : %d x %d px\n", r.PixelSize, r.PixelSize)
 		fmt.Printf("    Image Format : %s\n", fieldOrUnknown(r.ImageFormat))
 	} else {
 		fmt.Printf("    Pixel Size   : N/A (no display)\n")
@@ -74,7 +74,7 @@ func PrintReport(r ProbeResult) {
 			label = "  [" + fr.Label + "]"
 		}
 		if isAllZero(fr.Raw) {
-			fmt.Printf("    %s%s → (all zeros)\n", fr.IDHex, label)
+			fmt.Printf("    %s%s -> (all zeros)\n", fr.IDHex, label)
 			continue
 		}
 		fmt.Printf("    %s%s\n", fr.IDHex, label)
@@ -87,7 +87,7 @@ func PrintReport(r ProbeResult) {
 		}
 	}
 	for _, fr := range errorReports {
-		fmt.Printf("    %s → UNEXPECTED ERROR: %s\n", fr.IDHex, shortErr(fr.Error))
+		fmt.Printf("    %s -> UNEXPECTED ERROR: %s\n", fr.IDHex, shortErr(fr.Error))
 	}
 	if len(unsupportedIDs) > 0 {
 		fmt.Printf("    (not present on device: %s)\n", strings.Join(unsupportedIDs, ", "))
@@ -99,8 +99,8 @@ func PrintReport(r ProbeResult) {
 		dc := r.DeviceCaps
 		fmt.Println("  [Device Capabilities (report 0x08)]")
 		fmt.Printf("    Keys per row : %d\n", dc.KeysPerRow)
-		fmt.Printf("    Icon size    : %d × %d px\n", dc.IconWidth, dc.IconHeight)
-		fmt.Printf("    Panel size   : %d × %d px\n", dc.PanelWidth, dc.PanelHeight)
+		fmt.Printf("    Icon size    : %d x %d px\n", dc.IconWidth, dc.IconHeight)
+		fmt.Printf("    Panel size   : %d x %d px\n", dc.PanelWidth, dc.PanelHeight)
 		fmt.Println()
 	}
 
@@ -122,7 +122,7 @@ func PrintReport(r ProbeResult) {
 	// -- Captured Key Events ---------------------------------------------------
 	fmt.Println("  [Key Events (during listen window)]")
 	if len(r.KeyEvents) == 0 {
-		fmt.Println("    (none — press keys during the listen window to capture them)")
+		fmt.Println("    (none -- press keys during the listen window to capture them)")
 	} else {
 		for _, ev := range r.KeyEvents {
 			action := "PRESS"
@@ -181,7 +181,7 @@ func fieldOrUnknown(s string) string {
 
 func shortErr(s string) string {
 	if len(s) > 80 {
-		return s[:80] + "…"
+		return s[:80] + "..."
 	}
 	return s
 }
@@ -199,5 +199,5 @@ func truncHex(h string, maxChars int) string {
 	if len(h) <= maxChars {
 		return h
 	}
-	return h[:maxChars] + "… (" + fmt.Sprintf("%d", len(h)/2) + " bytes total)"
+	return h[:maxChars] + "... (" + fmt.Sprintf("%d", len(h)/2) + " bytes total)"
 }

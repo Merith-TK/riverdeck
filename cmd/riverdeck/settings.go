@@ -5,7 +5,7 @@ package main
 // The settings page is a virtual overlay (not a real folder) that appears when
 // the user presses the reserved back/settings key while at the navigation root.
 //
-// Layout (5-col × 3-row MK.2 example):
+// Layout (5-col x 3-row MK.2 example):
 //
 //	Col 0 (reserved)  Col 1      Col 2      Col 3      Col 4
 //	Row 0:  [BACK]   [EXIT]    [     ]   [     ]   [OPENDIR]
@@ -13,7 +13,7 @@ package main
 //	Row 2:  [     ]  [TMO-]   [T:XXs]   [TMO+]    [     ]
 //
 // Brightness steps: ±5, clamped to [5, 100].
-// Timeout cycles:   0 (never) → 30 → 60 → 120 → 300 → 0 …
+// Timeout cycles:   0 (never) -> 30 -> 60 -> 120 -> 300 -> 0 ...
 
 import (
 	"fmt"
@@ -267,7 +267,7 @@ func (a *App) adjustBrightness(delta int) {
 	if err := a.device.SetBrightness(v); err != nil {
 		log.Printf("SetBrightness: %v", err)
 	}
-	fmt.Printf("[*] Brightness → %d%%\n", v)
+	fmt.Printf("[*] Brightness -> %d%%\n", v)
 }
 
 // stepTimeout advances (delta=+1) or retreats (delta=-1) through timeoutValues.
@@ -282,7 +282,7 @@ func (a *App) stepTimeout(delta int) {
 	}
 	idx = (idx + delta + len(timeoutValues)) % len(timeoutValues)
 	a.config.Application.Timeout = timeoutValues[idx]
-	fmt.Printf("[*] Timeout → %s\n", fmtTimeout(a.config.Application.Timeout))
+	fmt.Printf("[*] Timeout -> %s\n", fmtTimeout(a.config.Application.Timeout))
 	// Reset the sleep timer with the new value
 	a.resetSleepTimer()
 }

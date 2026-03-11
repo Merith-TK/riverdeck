@@ -46,7 +46,7 @@ func main() {
 	if len(rawDevices) == 0 {
 		fmt.Printf("No Elgato devices found (scanned %d total HID devices).\n", allCount)
 		if allCount == 0 {
-			fmt.Println("No HID devices were visible at all — try running as Administrator.")
+			fmt.Println("No HID devices were visible at all -- try running as Administrator.")
 		} else {
 			fmt.Println("Tip: close Elgato Stream Deck software if it holds exclusive access,")
 			fmt.Println("     or try running this tool as Administrator.")

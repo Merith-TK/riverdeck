@@ -10,7 +10,7 @@ import (
 // RegisterURL preloads the "url" module into the given Lua state.
 // Lua scripts access it via: local url = require("url")
 //
-// Provides URL parsing, encoding, and query-string building — handy for
+// Provides URL parsing, encoding, and query-string building -- handy for
 // constructing API endpoints from Lua scripts.
 func RegisterURL(L *lua.LState) {
 	L.PreloadModule("url", urlLoader)

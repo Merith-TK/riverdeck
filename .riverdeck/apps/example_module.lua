@@ -39,7 +39,7 @@ local color       = {255, 0, 255} -- Magenta
 --[[
   script.background(state)
   Runs as a Lua coroutine managed by the Go runner.
-  Use `system.sleep(ms)` to yield — passive() and trigger() execute during
+  Use `system.sleep(ms)` to yield -- passive() and trigger() execute during
   the sleep window.  Do NOT use time.sleep() here; that blocks the goroutine.
   This coroutine restarts according to RESTART_POLICY if it exits or errors.
 ]]
@@ -62,7 +62,7 @@ end
     text_color = {r, g, b}     -- label colour (default: white)
     image      = "path"        -- relative .png/.jpg path; overrides color/text
 
-  Keep passive() fast — never do shell/http/file I/O here.
+  Keep passive() fast -- never do shell/http/file I/O here.
   Use background() to fetch data, store it in state, and call system.refresh().
 ]]
 function script.passive(key, state)

@@ -15,7 +15,7 @@
 // The lualib package provides additional pure-Go stdlib replacements:
 //
 //	utils      - table utilities (deepcopy, contains, merge)
-//	strings    - string utilities (split, trim, case conversion, …)
+//	strings    - string utilities (split, trim, case conversion, ...)
 //	json       - JSON encode / decode
 //	time       - Unix timestamps, date decomposition, blocking sleep
 //	log        - levelled logging (info, warn, error, debug)

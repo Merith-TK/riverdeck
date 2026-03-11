@@ -297,7 +297,7 @@ func (n *Navigator) PrevPage() bool {
 
 // RenderPage renders the current page to the Stream Deck.
 // Images are encoded concurrently, then written to the device serially.
-// No Clear() pass is needed — every key is explicitly overwritten.
+// No Clear() pass is needed -- every key is explicitly overwritten.
 func (n *Navigator) RenderPage() error {
 	page, err := n.LoadPage()
 	if err != nil {
@@ -342,7 +342,7 @@ func (n *Navigator) RenderPage() error {
 			images[n.contentKeys[i]] = n.createTextImage(truncateName(item.Name, 8), color.RGBA{30, 130, 80, 255})
 		}
 	}
-	// Any remaining content keys (no item) stay nil → black
+	// Any remaining content keys (no item) stay nil -> black
 
 	// Encode all keys concurrently
 	blackImg := func() image.Image {

@@ -5,7 +5,7 @@ import lua "github.com/yuin/gopher-lua"
 
 // RegisterAll preloads every lualib module into L in a single call.
 // This is the recommended way to wire the standard library from
-// pkg/scripting/runner.go — adding a new lualib module only requires
+// pkg/scripting/runner.go -- adding a new lualib module only requires
 // updating this list instead of editing both lualib and runner.
 func RegisterAll(L *lua.LState) {
 	// Core stdlib
