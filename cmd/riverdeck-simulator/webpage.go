@@ -2,12 +2,13 @@ package main
 
 // webpageTemplate is the HTML served at GET / for the graphical simulator UI.
 // Template variables:
-//   .ModelName  - human-readable device name  (string)
-//   .Cols       - number of key columns        (int)
-//   .Keys       - total number of keys         (int)
-//   .KeySize    - CSS pixel size per key button (int, e.g. 100)
-//   .Gap        - CSS gap between key buttons   (int, e.g. 8)
-//   .WsPort     - TCP port riverdeck connects to (int, for status display)
+//
+//	.ModelName  - human-readable device name  (string)
+//	.Cols       - number of key columns        (int)
+//	.Keys       - total number of keys         (int)
+//	.KeySize    - CSS pixel size per key button (int, e.g. 100)
+//	.Gap        - CSS gap between key buttons   (int, e.g. 8)
+//	.WsPort     - TCP port riverdeck connects to (int, for status display)
 const webpageTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>

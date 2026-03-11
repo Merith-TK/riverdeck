@@ -424,7 +424,7 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 
 	// Intercept T1/T2 BEFORE passing to the navigator so the old toggle
 	// logic inside HandleKeyPress never fires for these keys.
-	if event.Key == streamdeck.KeyToggle1 {
+	if event.Key == a.nav.Toggle1Key() {
 		if a.scriptMgr.HasT1Script() {
 			go func() {
 				if err := a.scriptMgr.TriggerT1(); err != nil {
@@ -435,7 +435,7 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 		// No script assigned: key is reserved/inert.
 		return nil
 	}
-	if event.Key == streamdeck.KeyToggle2 {
+	if event.Key == a.nav.Toggle2Key() {
 		if a.scriptMgr.HasT2Script() {
 			go func() {
 				if err := a.scriptMgr.TriggerT2(); err != nil {
@@ -517,7 +517,7 @@ func (a *App) updateVisibleScripts() {
 			}
 		}
 	}
-	a.scriptMgr.SetToggleScripts(t1Script, streamdeck.KeyToggle1, t2Script, streamdeck.KeyToggle2)
+	a.scriptMgr.SetToggleScripts(t1Script, a.nav.Toggle1Key(), t2Script, a.nav.Toggle2Key())
 }
 
 // handleBackHoldChange is called whenever the back/home key transitions between

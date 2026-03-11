@@ -38,13 +38,11 @@ type Page struct {
 // Row 1: 5,6,7,8,9
 // Row 2: 10,11,12,13,14
 //
-// TODO: Reserved keys are currently hardcoded for MK.2 (5 cols x 3 rows).
-// These should be dynamically calculated based on the device model's row count
-// and column layout. Consider: ReservedKeys = [0, cols, cols*2, ...] for col 0.
+// KeyBack is always key 0 (col 0, row 0) on every known device.
+// Toggle1 and Toggle2 indices depend on the column count and are exposed via
+// Navigator.Toggle1Key() / Toggle2Key() rather than as compile-time constants.
 const (
-	KeyBack    = 0  // Row 0, Col 0 - Navigate back
-	KeyToggle1 = 5  // Row 1, Col 0 - Reserved toggle (placeholder)
-	KeyToggle2 = 10 // Row 2, Col 0 - Reserved toggle (placeholder)
+	KeyBack = 0 // Row 0, Col 0 - Navigate back / settings entry
 )
 
 // Navigator manages folder-based navigation on a Stream Deck.
@@ -92,6 +90,43 @@ func (n *Navigator) calculateKeyLayout() {
 			}
 		}
 	}
+}
+
+// BackKey returns the physical key index for the back/settings button (col 0, row 0).
+// This is always 0 on all known Stream Deck models.
+func (n *Navigator) BackKey() int {
+	if len(n.reservedKeys) > 0 {
+		return n.reservedKeys[0]
+	}
+	return 0
+}
+
+// Toggle1Key returns the physical key index for the T1 reserved button (col 0, row 1).
+// On a 5-col device this is key 5; on an 8-col XL it is key 8, etc.
+func (n *Navigator) Toggle1Key() int {
+	if len(n.reservedKeys) > 1 {
+		return n.reservedKeys[1]
+	}
+	return n.dev.Cols() // safe fallback
+}
+
+// Toggle2Key returns the physical key index for the T2 reserved button (col 0, row 2).
+// On a 5-col device this is key 10; on an 8-col XL it is key 16, etc.
+func (n *Navigator) Toggle2Key() int {
+	if len(n.reservedKeys) > 2 {
+		return n.reservedKeys[2]
+	}
+	return n.dev.Cols() * 2 // safe fallback
+}
+
+// IsReservedKey reports whether keyIndex is in the reserved column (col 0).
+func (n *Navigator) IsReservedKey(keyIndex int) bool {
+	for _, k := range n.reservedKeys {
+		if k == keyIndex {
+			return true
+		}
+	}
+	return false
 }
 
 // GetContentKeys returns the key indices available for page content.
@@ -321,15 +356,19 @@ func (n *Navigator) RenderPage() error {
 
 	// Reserved column
 	if !n.IsAtRoot() {
-		images[KeyBack] = n.createTextImage("<-", color.RGBA{100, 100, 100, 255})
+		images[n.BackKey()] = n.createTextImage("<-", color.RGBA{100, 100, 100, 255})
 	} else {
 		// At root the back key doubles as the settings entry point
-		images[KeyBack] = n.CreateTextImageWithColors("SET", color.RGBA{120, 80, 0, 255}, color.RGBA{255, 200, 50, 255})
+		images[n.BackKey()] = n.CreateTextImageWithColors("SET", color.RGBA{120, 80, 0, 255}, color.RGBA{255, 200, 50, 255})
 	}
 	// T1 / T2: render a dim default; passive scripts from .directory.lua
 	// will paint over these via the key-update callback.
-	images[KeyToggle1] = n.createTextImage("T1", color.RGBA{30, 30, 30, 255})
-	images[KeyToggle2] = n.createTextImage("T2", color.RGBA{30, 30, 30, 255})
+	if t1 := n.Toggle1Key(); t1 < totalKeys {
+		images[t1] = n.createTextImage("T1", color.RGBA{30, 30, 30, 255})
+	}
+	if t2 := n.Toggle2Key(); t2 < totalKeys {
+		images[t2] = n.createTextImage("T2", color.RGBA{30, 30, 30, 255})
+	}
 
 	// Content keys
 	for i, item := range page.Items {
@@ -383,21 +422,27 @@ func (n *Navigator) RenderPage() error {
 }
 
 // renderReservedKeys renders the reserved column buttons (column 0).
+// Key indices are computed dynamically so this works correctly on all device sizes.
 func (n *Navigator) renderReservedKeys() {
 	// Key 0 (row 0, col 0): Back button / settings entry at root
 	if !n.IsAtRoot() {
 		img := n.createTextImage("<-", color.RGBA{100, 100, 100, 255})
-		n.dev.SetImage(KeyBack, img)
+		n.dev.SetImage(n.BackKey(), img)
 	} else {
 		// At root - the key opens the settings menu
 		img := n.CreateTextImageWithColors("SET", color.RGBA{120, 80, 0, 255}, color.RGBA{255, 200, 50, 255})
-		n.dev.SetImage(KeyBack, img)
+		n.dev.SetImage(n.BackKey(), img)
 	}
 
 	// T1 / T2: render a dim default; passive scripts from .directory.lua
 	// will paint over these via the key-update callback.
-	n.dev.SetImage(KeyToggle1, n.createTextImage("T1", color.RGBA{30, 30, 30, 255}))
-	n.dev.SetImage(KeyToggle2, n.createTextImage("T2", color.RGBA{30, 30, 30, 255}))
+	totalKeys := n.dev.Keys()
+	if t1 := n.Toggle1Key(); t1 < totalKeys {
+		n.dev.SetImage(t1, n.createTextImage("T1", color.RGBA{30, 30, 30, 255}))
+	}
+	if t2 := n.Toggle2Key(); t2 < totalKeys {
+		n.dev.SetImage(t2, n.createTextImage("T2", color.RGBA{30, 30, 30, 255}))
+	}
 }
 
 // HandleKeyPress handles a key press and returns the action to take.
@@ -410,15 +455,14 @@ func (n *Navigator) HandleKeyPress(keyIndex int) (*PageItem, bool, error) {
 	}
 
 	// Check if this is a reserved key (column 0)
-	switch keyIndex {
-	case KeyBack:
+	if keyIndex == n.BackKey() {
 		if n.NavigateBack() {
 			return nil, true, nil
 		}
 		return nil, false, nil
-
-	case KeyToggle1, KeyToggle2:
-		// Reserved - handled upstream before HandleKeyPress is called.
+	}
+	if n.IsReservedKey(keyIndex) {
+		// Other reserved keys (T1, T2, ...) are handled upstream before HandleKeyPress.
 		return nil, false, nil
 	}
 
