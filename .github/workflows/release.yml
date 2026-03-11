@@ -1,0 +1,98 @@
+﻿name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            archive: zip
+          - os: ubuntu-latest
+            archive: tar
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Mage
+        run: go install github.com/magefile/mage@latest
+
+      # ---------- Windows-only: install go-winres ----------
+      - name: Install go-winres
+        if: runner.os == 'Windows'
+        run: go install github.com/tc-hib/go-winres@latest
+
+      # ---------- Linux-only: CGO deps for Fyne ----------
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxinerama-dev libgl1-mesa-dev libxxf86vm-dev \
+            libayatana-appindicator3-dev libgtk-3-dev
+
+      # ---------- Build (native OS only) ----------
+      - name: Build
+        run: mage build
+
+      # ---------- Archive ----------
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -Directory | ForEach-Object {
+            Compress-Archive -Path "$($_.FullName)\*" -DestinationPath "dist\$($_.Name).zip"
+          }
+
+      - name: Archive (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          for dir in dist/*/; do
+            name=$(basename "$dir")
+            tar -czf "dist/${name}.tar.gz" -C "$(dirname "$dir")" "$name"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/**
