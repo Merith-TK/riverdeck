@@ -14,27 +14,27 @@ A programmable interface for Elgato Stream Deck devices. This Go application all
 
 ### Running the Application
 
-```bash
+'''bash
 go run .
-```
+'''
 
 Or build and run:
 
-```bash
+'''bash
 go build
 ./riverdeck
-```
+'''
 
 ### Configuration
 
 Scripts are stored in the config directory structure:
 
-```
+'''
 .riverdeck/interface/streamdeck/config/
-├── apps/          # Application launch scripts
-├── media/         # Media control scripts
-└── system/        # System control scripts
-```
+├-- apps/          # Application launch scripts
+├-- media/         # Media control scripts
+└-- system/        # System control scripts
+'''
 
 Each script is a Lua file that defines button behavior. See the scripting documentation for available APIs.
 
@@ -56,20 +56,20 @@ Each script is a Lua file that defines button behavior. See the scripting docume
 
 The application is structured for maintainability and extensibility:
 
-- `main.go`: Entry point and application lifecycle
-- `app.go`: Main application logic and event handling
-- `config.go`: Configuration management
-- `pkg/scripting/`: Lua script execution and management
-- `pkg/streamdeck/`: Low-level device communication and navigation
+- 'main.go': Entry point and application lifecycle
+- 'app.go': Main application logic and event handling
+- 'config.go': Configuration management
+- 'pkg/scripting/': Lua script execution and management
+- 'pkg/streamdeck/': Low-level device communication and navigation
 
 ## Contributing
 
 ### Adding New Features
 
-1. **Script APIs**: Extend functionality in `pkg/scripting/` by adding new Lua functions
-2. **Device Support**: Add new models in `pkg/streamdeck/models.go`
-3. **Navigation**: Modify navigation logic in `pkg/streamdeck/navigation.go`
-4. **UI Components**: Enhance the App struct in `app.go` for new capabilities
+1. **Script APIs**: Extend functionality in 'pkg/scripting/' by adding new Lua functions
+2. **Device Support**: Add new models in 'pkg/streamdeck/models.go'
+3. **Navigation**: Modify navigation logic in 'pkg/streamdeck/navigation.go'
+4. **UI Components**: Enhance the App struct in 'app.go' for new capabilities
 
 ### Code Organization
 
@@ -87,9 +87,9 @@ The application is structured for maintainability and extensibility:
 
 ## Dependencies
 
-- `github.com/sstallion/go-hid`: HID device communication
-- `github.com/yuin/gopher-lua`: Lua script execution
-- `golang.org/x/image`: Image processing for button displays
+- 'github.com/sstallion/go-hid': HID device communication
+- 'github.com/yuin/gopher-lua': Lua script execution
+- 'golang.org/x/image': Image processing for button displays
 
 ## Notes
 
