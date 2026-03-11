@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -171,29 +172,68 @@ func SaveConfig(config *Config, configPath string) error {
 }
 
 // getConfigPath determines the configuration path.
-// Priority order:
-// 1. --configdir flag (if provided)
+// Priority order (First Found):
+// 1. --config-dir flag (if provided)
 // 2. ./.riverdeck directory in current working directory
-// 3. ~/.riverdeck directory in user home
+// 3. Platform-specific config directory:
+//   - Windows: %APPDATA%/.riverdeck
+//   - Linux/Mac: $HOME/.config/.riverdeck
+//
+// Returns the first location that contains a config.yml file, or the default path if none found.
 func getConfigPath(configDir string) string {
-	// 1. Use --configdir if provided
+	// Helper function to check if config.yml exists in a directory
+	configExists := func(dir string) bool {
+		configPath := filepath.Join(dir, "config.yml")
+		if _, err := os.Stat(configPath); err == nil {
+			return true
+		}
+		return false
+	}
+
+	// 1. --config-dir takes first priority
 	if configDir != "" {
+		if configExists(configDir) {
+			return configDir
+		}
+		// Even if no config exists, use it as specified
 		return configDir
 	}
 
-	// 2. Check for .riverdeck directory in current path
-	if info, err := os.Stat(".riverdeck"); err == nil && info.IsDir() {
+	// 2. ./.riverdeck takes second priority
+	if configExists(".riverdeck") {
 		return ".riverdeck"
 	}
 
-	// 3. Fall back to ~/.riverdeck
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// Consider returning error or using a temp directory
-		return ".riverdeck"
+	// 3. Platform-specific path takes third priority
+	var defaultPath string
+	if runtime.GOOS == "windows" {
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			defaultPath = filepath.Join(appData, ".riverdeck")
+		} else {
+			// fallback to home
+			if homeDir, err := os.UserHomeDir(); err == nil {
+				defaultPath = filepath.Join(homeDir, ".riverdeck")
+			} else {
+				return ".riverdeck"
+			}
+		}
+	} else {
+		// linux/mac
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			defaultPath = filepath.Join(homeDir, ".config", ".riverdeck")
+		} else {
+			return ".riverdeck"
+		}
 	}
 
-	return filepath.Join(homeDir, ".riverdeck")
+	// Check if config exists in platform-specific location
+	if configExists(defaultPath) {
+		return defaultPath
+	}
+
+	// If no existing config found, return the default path so it gets created
+	return defaultPath
 }
 
 // ensureConfigDir creates the configuration directory if it doesn't exist.
