@@ -120,132 +120,59 @@ func DefaultConfig() *Config {
 	}
 }
 
-// LoadConfig loads configuration from the config file.
-func LoadConfig(configDir string) (*Config, error) {
-	configPath := filepath.Join(configDir, "config.yml")
-
-	// Start with defaults
-	config := DefaultConfig()
-
-	// Check if config file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Save defaults to create the file
-		if err := SaveConfig(config, configPath); err != nil {
-			return config, fmt.Errorf("failed to create default config: %w", err)
+// ConfigDir returns the configuration directory to use.
+// If override is non-empty it is returned as-is; otherwise the platform default:
+//
+//	Windows : %APPDATA%\.riverdeck
+//	Other   : $HOME/.config/riverdeck
+func ConfigDir(override string) string {
+	if override != "" {
+		return override
+	}
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, ".riverdeck")
 		}
-		return config, nil
 	}
-
-	// Read and parse config file
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return config, fmt.Errorf("failed to read config file: %w", err)
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".config", "riverdeck")
 	}
-
-	// Parse YAML
-	if err := yaml.Unmarshal(data, config); err != nil {
-		return config, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	return config, nil
+	return ".riverdeck"
 }
 
-// SaveConfig saves configuration to the config file.
-func SaveConfig(config *Config, configPath string) error {
-	data, err := yaml.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+// LoadConfig reads config.yml from dir, creating it with defaults when absent.
+// The directory is created automatically if it does not exist.
+func LoadConfig(dir string) (*Config, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Ensure directory exists
-	dir := filepath.Dir(configPath)
+	cfg := DefaultConfig()
+	data, err := os.ReadFile(filepath.Join(dir, "config.yml"))
+	if os.IsNotExist(err) {
+		// First run — write defaults so the user has a file to edit.
+		if werr := SaveConfig(cfg, dir); werr != nil {
+			return cfg, fmt.Errorf("failed to write default config: %w", werr)
+		}
+		return cfg, nil
+	}
+	if err != nil {
+		return cfg, fmt.Errorf("failed to read config: %w", err)
+	}
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return cfg, fmt.Errorf("failed to parse config: %w", err)
+	}
+	return cfg, nil
+}
+
+// SaveConfig writes cfg as config.yml inside dir.
+func SaveConfig(cfg *Config, dir string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-
-	// Write file
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
-}
-
-// getConfigPath determines the configuration path.
-// Priority order (First Found):
-// 1. --config-dir flag (if provided)
-// 2. ./.riverdeck directory in current working directory
-// 3. Platform-specific config directory:
-//   - Windows: %APPDATA%/.riverdeck
-//   - Linux/Mac: $HOME/.config/.riverdeck
-//
-// Returns the first location that contains a config.yml file, or the default path if none found.
-func getConfigPath(configDir string) string {
-	// Helper function to check if config.yml exists in a directory
-	configExists := func(dir string) bool {
-		configPath := filepath.Join(dir, "config.yml")
-		if _, err := os.Stat(configPath); err == nil {
-			return true
-		}
-		return false
-	}
-
-	// 1. --config-dir takes first priority
-	if configDir != "" {
-		if configExists(configDir) {
-			return configDir
-		}
-		// Even if no config exists, use it as specified
-		return configDir
-	}
-
-	// 2. ./.riverdeck takes second priority
-	if configExists(".riverdeck") {
-		return ".riverdeck"
-	}
-
-	// 3. Platform-specific path takes third priority
-	var defaultPath string
-	if runtime.GOOS == "windows" {
-		appData := os.Getenv("APPDATA")
-		if appData != "" {
-			defaultPath = filepath.Join(appData, ".riverdeck")
-		} else {
-			// fallback to home
-			if homeDir, err := os.UserHomeDir(); err == nil {
-				defaultPath = filepath.Join(homeDir, ".riverdeck")
-			} else {
-				return ".riverdeck"
-			}
-		}
-	} else {
-		// linux/mac
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			defaultPath = filepath.Join(homeDir, ".config", ".riverdeck")
-		} else {
-			return ".riverdeck"
-		}
-	}
-
-	// Check if config exists in platform-specific location
-	if configExists(defaultPath) {
-		return defaultPath
-	}
-
-	// If no existing config found, return the default path so it gets created
-	return defaultPath
-}
-
-// ensureConfigDir creates the configuration directory if it doesn't exist.
-func ensureConfigDir(configPath string) (string, error) {
-	if err := os.MkdirAll(configPath, 0755); err != nil {
-		return "", err
-	}
-
-	absConfigPath, err := filepath.Abs(configPath)
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-
-	return absConfigPath, nil
+	return os.WriteFile(filepath.Join(dir, "config.yml"), data, 0644)
 }

@@ -79,25 +79,23 @@ func NewApp() *App {
 //
 // Returns an error if initialization fails at any step.
 func (a *App) Init(configDir string) error {
-	// Determine config path first
-	configPath := getConfigPath(configDir)
-
-	// Ensure config directory exists
-	absConfigPath, err := ensureConfigDir(configPath)
+	// Resolve the single canonical config directory.
+	dir := ConfigDir(configDir)
+	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		absDir = dir
 	}
-	a.configPath = absConfigPath
+	a.configPath = absDir
 
-	// Load configuration
-	config, err := LoadConfig(absConfigPath)
+	// Load (or create) configuration.
+	config, err := LoadConfig(absDir)
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		config = DefaultConfig()
 	}
 	a.config = config
 
-	fmt.Printf("\n[*] Config directory: %s\n", absConfigPath)
+	fmt.Printf("\n[*] Config directory: %s\n", absDir)
 	fmt.Printf("[*] Configuration loaded\n")
 
 	// Initialize the streamdeck library
@@ -150,7 +148,7 @@ func (a *App) Init(configDir string) error {
 
 	// Create script manager and boot (loads scripts, starts background workers)
 	fmt.Println("[*] Booting script manager...")
-	a.scriptMgr = scripting.NewScriptManager(dev, absConfigPath, a.config.Application.PassiveFPS)
+	a.scriptMgr = scripting.NewScriptManager(dev, absDir, a.config.Application.PassiveFPS)
 
 	// Create a context for the entire application
 	a.ctx, a.cancel = context.WithCancel(context.Background())
@@ -161,7 +159,7 @@ func (a *App) Init(configDir string) error {
 	}
 
 	// Create navigator
-	a.nav = streamdeck.NewNavigator(dev, absConfigPath)
+	a.nav = streamdeck.NewNavigator(dev, absDir)
 	a.nav.SetScriptValidator(a.scriptMgr.IsUsableScript)
 
 	// Set up passive key updates from scripts
