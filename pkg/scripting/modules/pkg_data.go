@@ -43,6 +43,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/merith-tk/riverdeck/pkg/lualib"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -204,7 +205,7 @@ func (m *PackageDataModule) jsonRead(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	L.Push(goValueToLua(L, raw))
+	L.Push(lualib.GoToLua(L, raw))
 	L.Push(lua.LNil)
 	return 2
 }
@@ -219,7 +220,7 @@ func (m *PackageDataModule) jsonWrite(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	raw := luaValueToGo(val)
+	raw := lualib.LuaToGo(val)
 	data, err := json.MarshalIndent(raw, "", "  ")
 	if err != nil {
 		L.Push(lua.LFalse)
@@ -347,62 +348,5 @@ func (m *PackageDataModule) path(L *lua.LState) int {
 	return 1
 }
 
-// -- Conversion helpers --------------------------------------------------------
-
-// goValueToLua recursively converts a Go value (from json.Unmarshal) to an LValue.
-func goValueToLua(L *lua.LState, v interface{}) lua.LValue {
-	if v == nil {
-		return lua.LNil
-	}
-	switch val := v.(type) {
-	case bool:
-		return lua.LBool(val)
-	case float64:
-		return lua.LNumber(val)
-	case string:
-		return lua.LString(val)
-	case []interface{}:
-		tbl := L.NewTable()
-		for i, item := range val {
-			tbl.RawSetInt(i+1, goValueToLua(L, item))
-		}
-		return tbl
-	case map[string]interface{}:
-		tbl := L.NewTable()
-		for k, item := range val {
-			tbl.RawSetString(k, goValueToLua(L, item))
-		}
-		return tbl
-	default:
-		return lua.LString(fmt.Sprintf("%v", v))
-	}
-}
-
-// luaValueToGo recursively converts an LValue to a Go value for JSON encoding.
-func luaValueToGo(v lua.LValue) interface{} {
-	switch val := v.(type) {
-	case lua.LBool:
-		return bool(val)
-	case lua.LNumber:
-		return float64(val)
-	case lua.LString:
-		return string(val)
-	case *lua.LTable:
-		// Decide array vs object by whether all keys are sequential integers.
-		maxN := val.MaxN()
-		if maxN > 0 {
-			arr := make([]interface{}, maxN)
-			for i := 1; i <= maxN; i++ {
-				arr[i-1] = luaValueToGo(val.RawGetInt(i))
-			}
-			return arr
-		}
-		m := make(map[string]interface{})
-		val.ForEach(func(k, item lua.LValue) {
-			m[k.String()] = luaValueToGo(item)
-		})
-		return m
-	default:
-		return v.String()
-	}
-}
+// Lua↔Go conversion helpers are provided by the lualib package
+// (lualib.GoToLua, lualib.LuaToGo) to avoid duplication.

@@ -3,13 +3,7 @@ package streamdeck
 import (
 	"bytes"
 	"image"
-	"image/jpeg"
 )
-
-// encodeJPEG encodes an image to JPEG format.
-func encodeJPEG(w *bytes.Buffer, img image.Image) error {
-	return jpeg.Encode(w, img, &jpeg.Options{Quality: 90})
-}
 
 // encodeBMP encodes an image to BMP format for older Stream Deck devices.
 func encodeBMP(w *bytes.Buffer, img image.Image) error {

@@ -13,14 +13,6 @@ import (
 	"github.com/sstallion/go-hid"
 )
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Device represents an opened Stream Deck device.
 type Device struct {
 	hid   *hid.Device

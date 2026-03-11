@@ -3,6 +3,7 @@ package modules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -13,7 +14,9 @@ func checkFileAccess(path string, L *lua.LState) bool {
 	if configDir == "" {
 		return true
 	}
-	return filepath.HasPrefix(filepath.Clean(path), filepath.Clean(configDir))
+	cleanPath := filepath.Clean(path)
+	cleanDir := filepath.Clean(configDir)
+	return cleanPath == cleanDir || strings.HasPrefix(cleanPath, cleanDir+string(filepath.Separator))
 }
 
 // FileModule provides file system operations for Lua scripts.

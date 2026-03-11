@@ -83,7 +83,17 @@ func stringsCapitalize(L *lua.LState) int {
 // stringsTitleCase title-cases a string (first letter of each word uppercased).
 // Lua: strings.titlecase(str) -> str
 func stringsTitleCase(L *lua.LState) int {
-	L.Push(lua.LString(strings.Title(L.CheckString(1)))) //nolint:staticcheck
+	s := L.CheckString(1)
+	prev := ' '
+	result := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(prev) {
+			prev = r
+			return unicode.ToTitle(r)
+		}
+		prev = r
+		return r
+	}, s)
+	L.Push(lua.LString(result))
 	return 1
 }
 

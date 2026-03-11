@@ -26,7 +26,7 @@ func jsonLoader(L *lua.LState) int {
 // jsonEncode encodes a Lua value to a JSON string.
 // Lua: json.encode(value) -> string, err
 func jsonEncode(L *lua.LState) int {
-	goVal := luaToGo(L.Get(1))
+	goVal := LuaToGo(L.Get(1))
 	data, err := json.Marshal(goVal)
 	if err != nil {
 		L.Push(lua.LNil)
@@ -47,13 +47,14 @@ func jsonDecode(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	L.Push(goToLua(L, result))
+	L.Push(GoToLua(L, result))
 	L.Push(lua.LNil)
 	return 2
 }
 
-// luaToGo converts a Lua value to a Go value suitable for json.Marshal.
-func luaToGo(v lua.LValue) interface{} {
+// LuaToGo converts a Lua value to a Go value suitable for json.Marshal.
+// Handles primitives, arrays (sequential integer keys), and string-keyed tables.
+func LuaToGo(v lua.LValue) interface{} {
 	switch val := v.(type) {
 	case *lua.LNilType:
 		return nil
@@ -80,14 +81,14 @@ func luaToGo(v lua.LValue) interface{} {
 		if isArr && maxIdx > 0 {
 			arr := make([]interface{}, maxIdx)
 			for i := 1; i <= maxIdx; i++ {
-				arr[i-1] = luaToGo(val.RawGetInt(i))
+				arr[i-1] = LuaToGo(val.RawGetInt(i))
 			}
 			return arr
 		}
 		obj := make(map[string]interface{})
 		val.ForEach(func(k, v lua.LValue) {
 			if k.Type() == lua.LTString {
-				obj[k.String()] = luaToGo(v)
+				obj[k.String()] = LuaToGo(v)
 			}
 		})
 		return obj
@@ -96,8 +97,9 @@ func luaToGo(v lua.LValue) interface{} {
 	}
 }
 
-// goToLua converts a Go value (from json.Unmarshal) back to a Lua value.
-func goToLua(L *lua.LState, v interface{}) lua.LValue {
+// GoToLua converts a Go value (from json.Unmarshal) back to a Lua value.
+// Handles nil, bool, float64, string, []interface{}, and map[string]interface{}.
+func GoToLua(L *lua.LState, v interface{}) lua.LValue {
 	switch val := v.(type) {
 	case nil:
 		return lua.LNil
@@ -110,13 +112,13 @@ func goToLua(L *lua.LState, v interface{}) lua.LValue {
 	case []interface{}:
 		tbl := L.NewTable()
 		for i, item := range val {
-			tbl.RawSetInt(i+1, goToLua(L, item))
+			tbl.RawSetInt(i+1, GoToLua(L, item))
 		}
 		return tbl
 	case map[string]interface{}:
 		tbl := L.NewTable()
 		for k, item := range val {
-			tbl.RawSetString(k, goToLua(L, item))
+			tbl.RawSetString(k, GoToLua(L, item))
 		}
 		return tbl
 	default:

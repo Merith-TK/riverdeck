@@ -28,6 +28,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/merith-tk/riverdeck/pkg/imaging"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 )
@@ -202,7 +203,7 @@ func (a *App) setupKeyUpdateCallback() {
 
 			// Static image: cancel any running GIF for this key first.
 			a.stopGIFAnim(keyIndex)
-			img, err := scripting.LoadImage(appearance.Image)
+			img, err := imaging.LoadImage(appearance.Image)
 			if err == nil {
 				// Resize to fit key and display
 				resized := a.device.ResizeImage(img)
@@ -240,157 +241,6 @@ func (a *App) setupKeyUpdateCallback() {
 			a.device.SetKeyColor(keyIndex, c)
 		}
 	})
-}
-
-// stopGIFAnim cancels any running GIF animation goroutine for keyIndex.
-func (a *App) stopGIFAnim(keyIndex int) {
-	a.gifAnimsMu.Lock()
-	defer a.gifAnimsMu.Unlock()
-	if cancel, ok := a.gifAnims[keyIndex]; ok {
-		cancel()
-		delete(a.gifAnims, keyIndex)
-	}
-}
-
-// startGIFAnim loads an animated GIF and starts a goroutine that cycles
-// its frames onto keyIndex at the GIF's native frame rate.
-// The appearance is captured so that any text/text_color settings are
-// composited on top of every GIF frame.
-// Any previously running animation for that key is cancelled first.
-func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
-	data, err := scripting.LoadGIFFrames(appearance.Image)
-	if err != nil {
-		log.Printf("GIF load failed for key %d: %v", keyIndex, err)
-		return
-	}
-	if len(data.Frames) == 0 {
-		return
-	}
-
-	// Snapshot the text fields so the goroutine doesn't race on the struct.
-	text := appearance.Text
-	textColor := color.RGBA{
-		R: uint8(appearance.TextColor[0]),
-		G: uint8(appearance.TextColor[1]),
-		B: uint8(appearance.TextColor[2]),
-		A: 255,
-	}
-
-	// Cancel any existing animation for this key.
-	a.gifAnimsMu.Lock()
-	if cancel, ok := a.gifAnims[keyIndex]; ok {
-		cancel()
-	}
-	ctx, cancel := context.WithCancel(a.ctx)
-	a.gifAnims[keyIndex] = cancel
-	a.gifAnimsMu.Unlock()
-
-	go func() {
-		// frameTarget tracks when the current frame should have been shown.
-		// Using a reference point prevents processing-time drift from
-		// accumulating and causing the effective FPS to fall below the GIF's
-		// encoded rate.
-		frameTarget := time.Now()
-		for {
-			for i, frame := range data.Frames {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				// Skip frame if display is asleep or settings overlay is active.
-				a.sleepMu.Lock()
-				isSleeping := a.sleeping
-				a.sleepMu.Unlock()
-				if !isSleeping && !a.inSettings {
-					resized := a.device.ResizeImage(frame)
-					// Overlay text on the GIF frame when the script specifies it.
-					if text != "" {
-						resized = a.nav.RenderTextOnImage(resized, text, textColor)
-					}
-					_ = a.device.SetImage(keyIndex, resized)
-				}
-
-				// Per-frame delay: GIF delays are in centiseconds (×10 = ms).
-				// Default to 1 centisecond (10 ms) when the frame has no delay
-				// so that fast/untagged GIFs play at their intended speed.
-				delay := 1
-				if i < len(data.Delays) && data.Delays[i] > 0 {
-					delay = data.Delays[i]
-				}
-				frameTarget = frameTarget.Add(time.Duration(delay) * 10 * time.Millisecond)
-				sleepFor := time.Until(frameTarget)
-				if sleepFor > 0 {
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(sleepFor):
-					}
-				} else {
-					// We're running behind – yield briefly and continue.
-					select {
-					case <-ctx.Done():
-						return
-					default:
-					}
-				}
-			}
-		}
-	}()
-}
-
-// stopAllGIFAnims cancels every running GIF animation goroutine.
-// Call this before navigating to a new page or on shutdown.
-func (a *App) stopAllGIFAnims() {
-	a.gifAnimsMu.Lock()
-	defer a.gifAnimsMu.Unlock()
-	for key, cancel := range a.gifAnims {
-		cancel()
-		delete(a.gifAnims, key)
-	}
-}
-
-// resetSleepTimer resets (or starts) the inactivity sleep timer.
-// Must be called after any key activity and after timeout config changes.
-func (a *App) resetSleepTimer() {
-	a.sleepMu.Lock()
-	defer a.sleepMu.Unlock()
-
-	if a.sleepTimer != nil {
-		a.sleepTimer.Stop()
-		a.sleepTimer = nil
-	}
-
-	if a.config.Application.Timeout <= 0 {
-		return // disabled
-	}
-
-	duration := time.Duration(a.config.Application.Timeout) * time.Second
-	a.sleepTimer = time.AfterFunc(duration, func() {
-		a.sleepMu.Lock()
-		defer a.sleepMu.Unlock()
-		if !a.sleeping {
-			a.sleeping = true
-			fmt.Println("[*] Display sleeping (timeout)")
-			_ = a.device.SetBrightness(0)
-		}
-	})
-}
-
-// wakeDisplay restores brightness if the display is sleeping.
-// Returns true if the device was actually woken (caller should swallow the key).
-func (a *App) wakeDisplay() bool {
-	a.sleepMu.Lock()
-	defer a.sleepMu.Unlock()
-
-	if !a.sleeping {
-		return false
-	}
-	a.sleeping = false
-	fmt.Println("[*] Display waking up")
-	_ = a.device.SetBrightness(a.config.Application.Brightness)
-	return true
 }
 
 // Run starts the main event loop and handles user interactions.
