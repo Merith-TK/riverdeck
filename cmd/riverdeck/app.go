@@ -196,7 +196,7 @@ func (a *App) setupKeyUpdateCallback() {
 		if appearance.Image != "" {
 			// Animated GIF: spin up a per-key animation goroutine.
 			if strings.ToLower(filepath.Ext(appearance.Image)) == ".gif" {
-				a.startGIFAnim(keyIndex, appearance.Image)
+				a.startGIFAnim(keyIndex, appearance)
 				return
 			}
 
@@ -254,15 +254,26 @@ func (a *App) stopGIFAnim(keyIndex int) {
 
 // startGIFAnim loads an animated GIF and starts a goroutine that cycles
 // its frames onto keyIndex at the GIF's native frame rate.
+// The appearance is captured so that any text/text_color settings are
+// composited on top of every GIF frame.
 // Any previously running animation for that key is cancelled first.
-func (a *App) startGIFAnim(keyIndex int, path string) {
-	data, err := scripting.LoadGIFFrames(path)
+func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
+	data, err := scripting.LoadGIFFrames(appearance.Image)
 	if err != nil {
 		log.Printf("GIF load failed for key %d: %v", keyIndex, err)
 		return
 	}
 	if len(data.Frames) == 0 {
 		return
+	}
+
+	// Snapshot the text fields so the goroutine doesn't race on the struct.
+	text := appearance.Text
+	textColor := color.RGBA{
+		R: uint8(appearance.TextColor[0]),
+		G: uint8(appearance.TextColor[1]),
+		B: uint8(appearance.TextColor[2]),
+		A: 255,
 	}
 
 	// Cancel any existing animation for this key.
@@ -275,6 +286,11 @@ func (a *App) startGIFAnim(keyIndex int, path string) {
 	a.gifAnimsMu.Unlock()
 
 	go func() {
+		// frameTarget tracks when the current frame should have been shown.
+		// Using a reference point prevents processing-time drift from
+		// accumulating and causing the effective FPS to fall below the GIF's
+		// encoded rate.
+		frameTarget := time.Now()
 		for {
 			for i, frame := range data.Frames {
 				select {
@@ -289,18 +305,35 @@ func (a *App) startGIFAnim(keyIndex int, path string) {
 				a.sleepMu.Unlock()
 				if !isSleeping && !a.inSettings {
 					resized := a.device.ResizeImage(frame)
+					// Overlay text on the GIF frame when the script specifies it.
+					if text != "" {
+						resized = a.nav.RenderTextOnImage(resized, text, textColor)
+					}
 					_ = a.device.SetImage(keyIndex, resized)
 				}
 
 				// Per-frame delay: GIF delays are in centiseconds (×10 = ms).
-				delay := data.Delays[i]
-				if delay <= 0 {
-					delay = 10 // default 100ms if unset
+				// Default to 1 centisecond (10 ms) when the frame has no delay
+				// so that fast/untagged GIFs play at their intended speed.
+				delay := 1
+				if i < len(data.Delays) && data.Delays[i] > 0 {
+					delay = data.Delays[i]
 				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(time.Duration(delay) * 10 * time.Millisecond):
+				frameTarget = frameTarget.Add(time.Duration(delay) * 10 * time.Millisecond)
+				sleepFor := time.Until(frameTarget)
+				if sleepFor > 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(sleepFor):
+					}
+				} else {
+					// We're running behind – yield briefly and continue.
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
 				}
 			}
 		}

@@ -500,6 +500,32 @@ func (n *Navigator) CreateTextImageWithColors(text string, bgColor, textColor co
 	return img
 }
 
+// RenderTextOnImage draws centred text over an already-rendered image without
+// replacing the background. The caller is responsible for passing an image
+// that has already been resized to the device's pixel size.
+func (n *Navigator) RenderTextOnImage(base image.Image, text string, textColor color.Color) image.Image {
+	size := n.dev.PixelSize()
+	result := image.NewRGBA(image.Rect(0, 0, size, size))
+	draw.Draw(result, result.Bounds(), base, image.Point{}, draw.Src)
+
+	d := &font.Drawer{
+		Dst:  result,
+		Src:  image.NewUniform(textColor),
+		Face: basicfont.Face7x13,
+	}
+
+	textWidth := len(text) * 7 // basicfont is ~7px wide per char
+	x := (size - textWidth) / 2
+	if x < 2 {
+		x = 2
+	}
+	y := size/2 + 4 // Centre vertically
+
+	d.Dot = fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
+	d.DrawString(text)
+	return result
+}
+
 // truncateName truncates a name to fit on a button.
 func truncateName(name string, maxLen int) string {
 	if len(name) <= maxLen {
