@@ -23,14 +23,25 @@ func (s *AppState) buildSaveStep() fyne.CanvasObject {
 		fyne.TextStyle{Bold: true},
 	)
 
-	// Deduplicate probe results by model name.
+	// Deduplicate probe results by model name, merging in raw packets
+	// collected during the interaction step.
 	seen := map[string]bool{}
+	inputByModel := map[string]*DeviceInputState{}
+	for _, dis := range s.inputStates {
+		inputByModel[dis.ProbeResult.ModelName] = dis
+	}
 	var toSave []prober.ProbeResult
 	for _, r := range s.probeResults {
 		if seen[r.ModelName] {
 			continue
 		}
 		seen[r.ModelName] = true
+		// Merge raw packets from the GUI interaction step into the probe result.
+		if dis, ok := inputByModel[r.ModelName]; ok {
+			dis.rawMu.Lock()
+			r.RawPackets = append(r.RawPackets, dis.RawPackets...)
+			dis.rawMu.Unlock()
+		}
 		toSave = append(toSave, r)
 	}
 

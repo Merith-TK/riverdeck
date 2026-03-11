@@ -1,6 +1,8 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/merith-tk/riverdeck/pkg/prober"
 )
 
@@ -8,10 +10,11 @@ import (
 type InputKind int
 
 const (
-	InputButton  InputKind = iota
-	InputDialCW            // clockwise rotation
-	InputDialCCW           // counter-clockwise rotation
-	InputDialPress
+	InputButton     InputKind = iota
+	InputDialCW               // clockwise rotation
+	InputDialCCW              // counter-clockwise rotation
+	InputDialPress            // dial clicked down
+	InputTouchPoint           // capacitive touch point (e.g. Neo touch bar)
 )
 
 // InputSpec describes a single expected input on a device.
@@ -33,12 +36,23 @@ type DeviceInputState struct {
 
 	// Raw HID packet channel for non-button inputs (dials etc.)
 	rawCh chan []byte
+
+	// Collected non-key HID packets captured during the interaction step.
+	// Protected by rawMu; merged into ProbeResult before saving.
+	rawMu      sync.Mutex
+	RawPackets []prober.CapturedRawPacket
 }
 
 // modelDialCounts lists how many dials a model has (by ProductID).
 // Only models with dials are listed; zero means no dials.
 var modelDialCounts = map[uint16]int{
 	0x009a: 4, // Stream Deck +
+}
+
+// modelTouchCounts lists how many touch points a model has (by ProductID).
+// Only models with touch points are listed; zero means none.
+var modelTouchCounts = map[uint16]int{
+	0x0090: 2, // Stream Deck Neo
 }
 
 // buildInputSpec constructs the list of expected inputs for a probed device.
@@ -69,6 +83,13 @@ func buildInputSpec(result prober.ProbeResult) []*InputSpec {
 			Label: labelDial(d, "Press")})
 	}
 
+	// Touch points (if this model has them)
+	touchCount := modelTouchCounts[result.ProductID]
+	for t := 0; t < touchCount; t++ {
+		specs = append(specs, &InputSpec{Kind: InputTouchPoint, Index: t,
+			Label: labelTouch(t)})
+	}
+
 	return specs
 }
 
@@ -78,6 +99,10 @@ func labelButton(i int) string {
 
 func labelDial(d int, dir string) string {
 	return "Dial " + itoa(d+1) + " " + dir
+}
+
+func labelTouch(t int) string {
+	return "Touch " + itoa(t+1)
 }
 
 // allDone returns true when every InputSpec in the slice is Done.

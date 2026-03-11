@@ -22,7 +22,7 @@ should be merged.
 
 ### What the prober now captures correctly
 
-- **Feature reports** 0x00–0x0F (curated) or 0x00–0x2F (`--all-reports`):
+- **Feature reports** 0x00-0x0F (curated) or 0x00-0x2F (`--all-reports`):
   full hex, ASCII extract, and structured decode for known IDs. ✅
 - **Key packet structure**: idle sampling detects format (`V1`/`V2`), byte
   offset, and key count from raw packet shape. Sample hex included. ✅
@@ -36,19 +36,24 @@ should be merged.
 
 ### Remaining gaps
 
-- **Non-key packets not saved to JSON**: during the interactive GUI step,
-  unknown packets (dials, touch) are shown in the status label but are **not
-  written to the `ProbeResult`**. A user with an SD+ whose dials are not
-  decoded would lose those raw bytes from the saved dump.
-  - Fix needed: add a `RawPackets []CapturedRawPacket` field to `ProbeResult`
-    and flush all unrecognised HID packets into it during both the CLI listen
-    window (`CaptureKeyEvents`) and the GUI interaction step.
-- **CLI listen drops non-key packets**: `CaptureKeyEvents` in
-  `pkg/prober/probe.go` only fires on recognised key-state changes; dial and
-  touch packets that arrive during `-listen` are silently discarded.
-- **Touch inputs not modelled**: `inputs.go` has no `InputTouchPoint` kind
-  and `buildInputSpec` never adds touch specs, so a Neo's touch strip cannot
-  be exercised or recorded in the GUI wizard.
+> **All three gaps have been resolved.** ✅
+
+- **Non-key packets not saved to JSON** -- ✅ Fixed: `CapturedRawPacket` type added
+  to `pkg/prober/types.go`; `ProbeResult.RawPackets []CapturedRawPacket` field
+  added. `CaptureKeyEvents` now classifies each packet via `DetectKeyFormat` and
+  routes non-key packets into the returned `[]CapturedRawPacket`. `StreamEvents`
+  gained an optional `rawOut chan<- CapturedRawPacket` parameter. `ProbeDevice`
+  stores both return values. The GUI interact step appends unknown packets to
+  `DeviceInputState.RawPackets` (mutex-protected); `buildSaveStep` merges them
+  into the `ProbeResult` before writing JSON.
+- **CLI listen drops non-key packets** -- ✅ Fixed: `CaptureKeyEvents` now returns
+  `([]CapturedKeyEvent, []CapturedRawPacket)`; non-key packets from the CLI
+  `-listen` window are included in the saved JSON under `raw_packets`.
+- **Touch inputs not modelled** -- ✅ Fixed: `InputTouchPoint` kind added to
+  `inputs.go`; `modelTouchCounts` map added (`0x0090` -> 2 for Neo);
+  `buildInputSpec` emits "Touch 1" / "Touch 2" tiles for the Neo. Packet format
+  still unknown so tiles do not auto-complete, but raw bytes are captured and
+  saved under `raw_packets` for future decoding.
 
 ---
 
@@ -305,16 +310,18 @@ When eventually implemented, it would be a new simulator variant (similar to
 
 ## Change Checklist by File
 
-| File | Change | Gated on |
+| File | Change | Status |
 |---|---|---|
-| `pkg/streamdeck/models.go` | Add Module PIDs; add capability fields (`HasDials`, `Dials`, `HasTouchPoints`, `TouchPoints`, `HasStatusBar`, `StatusBarWidth/Height`, `DialPlacement`) | Each device's dump |
-| `pkg/streamdeck/iface.go` | Add `ListenDials()`, `ListenTouch()`, `SetStatusBarImage()` | Neo + SD+ dumps |
-| `pkg/streamdeck/device.go` | Implement above for real HID | Same |
-| `pkg/streamdeck/simclient.go` | Simulator versions of above | Same |
-| `pkg/streamdeck/navigation.go` | Skip image render when `PixelSize==0`; side-dial layout mode for Studio | Pedal confirmed; Studio dump |
-| `pkg/scripting/modules/streamdeck.go` | Dial/touch callbacks, `set_status_bar` Lua API | Neo + SD+ dumps |
-| `pkg/scripting/runner.go` | `press()`/`release()` call pattern for Pedal | Pedal dump |
-| `cmd/riverdeck-debug-prober/` | Already captures key events with raw hex; **still needs**: persist unknown packets to JSON, record non-key packets in CLI listen mode, add Neo touch input kind | Priority 0 gap |
-| `pkg/prober/probe.go` | Add `RawPackets []CapturedRawPacket` to `ProbeResult`; drain all unrecognised packets into it in `CaptureKeyEvents` and `StreamEvents` | Priority 0 gap |
-| `pkg/prober/types.go` | Add `CapturedRawPacket` type (timestamp, length, hex) | Priority 0 gap |
-| `testdata/` | Add reference probe dumps as they are received | Per device |
+| `pkg/prober/types.go` | Added `CapturedRawPacket` type and `ProbeResult.RawPackets` field | ✅ Done |
+| `pkg/prober/probe.go` | `CaptureKeyEvents` returns `([]CapturedKeyEvent, []CapturedRawPacket)`; `StreamEvents` accepts optional `rawOut` channel; non-key packets routed to both | ✅ Done |
+| `cmd/riverdeck-debug-prober/inputs.go` | Added `InputTouchPoint` kind; `modelTouchCounts` map (Neo=2); touch specs in `buildInputSpec`; `DeviceInputState.RawPackets` with mutex | ✅ Done |
+| `cmd/riverdeck-debug-prober/interact.go` | Unknown packets appended to `dis.RawPackets` (mutex-protected) and persisted | ✅ Done |
+| `cmd/riverdeck-debug-prober/save.go` | Merges `dis.RawPackets` into `ProbeResult` before writing JSON | ✅ Done |
+| `pkg/streamdeck/models.go` | Add Module PIDs; add capability fields (`HasDials`, `Dials`, `HasTouchPoints`, `TouchPoints`, `HasStatusBar`, `StatusBarWidth/Height`, `DialPlacement`) | ⏳ Needs dump |
+| `pkg/streamdeck/iface.go` | Add `ListenDials()`, `ListenTouch()`, `SetStatusBarImage()` | ⏳ Neo + SD+ dumps |
+| `pkg/streamdeck/device.go` | Implement above for real HID | ⏳ Same |
+| `pkg/streamdeck/simclient.go` | Simulator versions of above | ⏳ Same |
+| `pkg/streamdeck/navigation.go` | Skip image render when `PixelSize==0`; side-dial layout mode for Studio | ⏳ Pedal confirmed; Studio dump |
+| `pkg/scripting/modules/streamdeck.go` | Dial/touch callbacks, `set_status_bar` Lua API | ⏳ Neo + SD+ dumps |
+| `pkg/scripting/runner.go` | `press()`/`release()` call pattern for Pedal | ⏳ Pedal dump |
+| `testdata/` | Add reference probe dumps as they are received | ⏳ Per device |

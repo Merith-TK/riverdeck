@@ -107,7 +107,7 @@ func ProbeDevice(raw hid.DeviceInfo, listenDur time.Duration, allReports bool) P
 
 	// -- Live key-event capture ------------------------------------------------
 	if listenDur > 0 {
-		r.KeyEvents = CaptureKeyEvents(dev, r.Keys, listenDur)
+		r.KeyEvents, r.RawPackets = CaptureKeyEvents(dev, r.Keys, listenDur)
 	}
 
 	return r
@@ -175,14 +175,16 @@ func DetectKeyFormat(pkt []byte) (format string, keyOffset int, keyCount int) {
 	return "unknown", 0, 0
 }
 
-// CaptureKeyEvents listens for HID input reports for the given duration and
-// records every key state change as a CapturedKeyEvent.
-func CaptureKeyEvents(dev *hid.Device, expectedKeys int, dur time.Duration) []CapturedKeyEvent {
+// CaptureKeyEvents listens for HID input reports for the given duration.
+// It returns key state-change events AND any packets that were not recognised
+// as key packets (e.g. dial rotations, touch events, LCD reports).
+func CaptureKeyEvents(dev *hid.Device, expectedKeys int, dur time.Duration) ([]CapturedKeyEvent, []CapturedRawPacket) {
 	if expectedKeys <= 0 {
 		expectedKeys = 32
 	}
 
 	var events []CapturedKeyEvent
+	var rawPkts []CapturedRawPacket
 	prevState := make([]bool, expectedKeys)
 	start := time.Now()
 	deadline := start.Add(dur)
@@ -204,17 +206,30 @@ func CaptureKeyEvents(dev *hid.Device, expectedKeys int, dur time.Duration) []Ca
 		if err != nil || n == 0 {
 			continue
 		}
-		pktHex := strings.ToUpper(hex.EncodeToString(buf[:n]))
+		pkt := buf[:n]
+		pktHex := strings.ToUpper(hex.EncodeToString(pkt))
+
+		pktFmt, ko, _ := DetectKeyFormat(pkt)
+		if pktFmt == "unknown" {
+			// Not a button packet -- record raw for later analysis.
+			rawPkts = append(rawPkts, CapturedRawPacket{
+				RelativeMS: time.Since(start).Milliseconds(),
+				Length:     n,
+				PacketHex:  pktHex,
+			})
+			continue
+		}
 
 		if keyOffset == -1 {
-			_, keyOffset, _ = DetectKeyFormat(buf[:n])
-			if keyOffset == 0 {
+			if ko == 0 {
 				keyOffset = 4
+			} else {
+				keyOffset = ko
 			}
 		}
 
 		for i := 0; i < expectedKeys && keyOffset+i < n; i++ {
-			pressed := buf[keyOffset+i] != 0
+			pressed := pkt[keyOffset+i] != 0
 			if pressed != prevState[i] {
 				events = append(events, CapturedKeyEvent{
 					RelativeMS: time.Since(start).Milliseconds(),
@@ -227,7 +242,7 @@ func CaptureKeyEvents(dev *hid.Device, expectedKeys int, dur time.Duration) []Ca
 		}
 	}
 
-	return events
+	return events, rawPkts
 }
 
 // OpenDevice opens a HID device by path and returns it for streaming reads.
@@ -236,9 +251,11 @@ func OpenDevice(path string) (*hid.Device, error) {
 }
 
 // StreamEvents reads raw HID packets from an already-opened device and sends
-// CapturedKeyEvents to the provided channel. It returns when ctx is cancelled.
+// events to the provided channels. It returns when stop is closed.
 // expectedKeys should come from the probe result.
-func StreamEvents(dev *hid.Device, expectedKeys int, out chan<- CapturedKeyEvent, stop <-chan struct{}) {
+// rawOut may be nil; if set, every packet not recognised as a button packet
+// is forwarded there (dial, touch, LCD, and other non-button reports).
+func StreamEvents(dev *hid.Device, expectedKeys int, out chan<- CapturedKeyEvent, rawOut chan<- CapturedRawPacket, stop <-chan struct{}) {
 	if expectedKeys <= 0 {
 		expectedKeys = 32
 	}
@@ -258,17 +275,34 @@ func StreamEvents(dev *hid.Device, expectedKeys int, out chan<- CapturedKeyEvent
 		if err != nil || n == 0 {
 			continue
 		}
-		pktHex := strings.ToUpper(hex.EncodeToString(buf[:n]))
+		pkt := buf[:n]
+		pktHex := strings.ToUpper(hex.EncodeToString(pkt))
+
+		pktFmt, ko, _ := DetectKeyFormat(pkt)
+		if pktFmt == "unknown" {
+			if rawOut != nil {
+				select {
+				case rawOut <- CapturedRawPacket{
+					RelativeMS: time.Since(start).Milliseconds(),
+					Length:     n,
+					PacketHex:  pktHex,
+				}:
+				default:
+				}
+			}
+			continue
+		}
 
 		if keyOffset == -1 {
-			_, keyOffset, _ = DetectKeyFormat(buf[:n])
-			if keyOffset == 0 {
+			if ko == 0 {
 				keyOffset = 4
+			} else {
+				keyOffset = ko
 			}
 		}
 
 		for i := 0; i < expectedKeys && keyOffset+i < n; i++ {
-			pressed := buf[keyOffset+i] != 0
+			pressed := pkt[keyOffset+i] != 0
 			if pressed != prevState[i] {
 				select {
 				case out <- CapturedKeyEvent{

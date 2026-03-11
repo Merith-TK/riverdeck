@@ -167,6 +167,7 @@ func (s *AppState) buildDeviceInputTab(dis *DeviceInputState, onChange func()) *
 		dialLastValue := map[int]int{}
 		buf := make([]byte, 512)
 		keyOffset := -1
+		start := time.Now()
 
 		for {
 			select {
@@ -263,11 +264,22 @@ func (s *AppState) buildDeviceInputTab(dis *DeviceInputState, onChange func()) *
 					})
 				}
 			} else {
-				pktStr := strings.ToUpper(hex.EncodeToString(pkt))
-				if len(pktStr) > 48 {
-					pktStr = pktStr[:48] + "..."
+				// Unknown packet -- save full hex to RawPackets for analysis and
+				// show a truncated preview in the status label.
+				pktHex := strings.ToUpper(hex.EncodeToString(pkt))
+				dis.rawMu.Lock()
+				dis.RawPackets = append(dis.RawPackets, prober.CapturedRawPacket{
+					RelativeMS: time.Since(start).Milliseconds(),
+					Length:     n,
+					PacketHex:  pktHex,
+				})
+				dis.rawMu.Unlock()
+
+				display := pktHex
+				if len(display) > 48 {
+					display = display[:48] + "..."
 				}
-				fyne.Do(func() { statusLabel.SetText("Last raw pkt: " + pktStr) })
+				fyne.Do(func() { statusLabel.SetText("Last raw pkt: " + display) })
 			}
 		}
 	}()

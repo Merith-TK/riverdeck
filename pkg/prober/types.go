@@ -37,6 +37,11 @@ type ProbeResult struct {
 	// -- Key events captured during listen window ------------------------------
 	KeyEvents []CapturedKeyEvent `json:"key_events,omitempty"`
 
+	// -- Raw packets that were not recognised as key events --------------------
+	// These include dial, touch, LCD, and any other non-button HID input reports.
+	// Captured during the CLI listen window and the GUI interaction step.
+	RawPackets []CapturedRawPacket `json:"raw_packets,omitempty"`
+
 	// -- Metadata --------------------------------------------------------------
 	ProbeTime string   `json:"probe_time"`
 	Errors    []string `json:"errors,omitempty"`
@@ -80,4 +85,13 @@ type CapturedKeyEvent struct {
 	KeyIndex   int    `json:"key_index"`
 	Pressed    bool   `json:"pressed"`
 	PacketHex  string `json:"packet_hex"` // raw packet that triggered this event
+}
+
+// CapturedRawPacket is an HID input packet that was not recognised as a key event.
+// This captures dial rotations, touch events, LCD reports, and any other
+// device-specific input whose format is not yet decoded.
+type CapturedRawPacket struct {
+	RelativeMS int64  `json:"relative_ms"` // ms since listen/interaction start
+	Length     int    `json:"length"`      // number of bytes in the packet
+	PacketHex  string `json:"packet_hex"`  // full packet as uppercase hex
 }
