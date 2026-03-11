@@ -76,9 +76,6 @@ type ScriptRunner struct {
 	L     *lua.LState
 	state *lua.LTable // Shared state table
 
-	// Table pool for reducing allocations
-	tablePool sync.Pool
-
 	// Module table returned by script (always required)
 	module *lua.LTable
 
@@ -128,6 +125,11 @@ type ScriptRunner struct {
 	// Empty for normal button/directory scripts, which have no write access.
 	packageDataDir string
 
+	// configModule is the per-script read-only config module (require('config')).
+	// Populated from .config.json in folder mode, or from template metadata in
+	// layout mode. Nil means the module is not registered.
+	configModule *modules.ConfigModule
+
 	// Refresh callback (called when script wants display update)
 	onRefresh func()
 
@@ -163,12 +165,11 @@ func NewScriptRunner(scriptPath string, dev streamdeck.DeviceIface, configDir st
 		packageDataDir:  packageDataDir,
 		restartPolicy:   RestartAlways,
 		passiveCache:    make(map[string]*KeyAppearance),
-		tablePool: sync.Pool{
-			New: func() interface{} {
-				return &lua.LTable{}
-			},
-		},
 	}
+
+	// Load per-script config from sibling .config.json (folder mode).
+	// In layout mode this is overridden by SetConfigModule() before Boot.
+	r.configModule = BuildConfigModule(scriptPath)
 
 	// Create Lua state
 	r.L = lua.NewState()
@@ -248,6 +249,11 @@ func (r *ScriptRunner) registerModules() {
 		r.L.PreloadModule("store", r.store.Loader)
 	}
 
+	// Register the per-script config module if configuration was provided.
+	if r.configModule != nil {
+		r.L.PreloadModule("config", r.configModule.Loader)
+	}
+
 	// Register the package-scoped data module when this script is a package script.
 	// Regular button/directory scripts have packageDataDir == "" and never receive
 	// this module, so they cannot write to the package data directory directly.
@@ -287,6 +293,20 @@ func (r *ScriptRunner) SetRefreshCallback(cb func()) {
 	r.onRefresh = cb
 }
 
+// SetConfigModule replaces the per-script config module.
+//
+// In layout mode the ScriptManager calls this after NewScriptRunner to inject
+// the template's MetadataSchema and the button's metadata overrides so that
+// require('config') returns the correct per-button values.
+//
+// Must be called before Boot / StartBackground.
+func (r *ScriptRunner) SetConfigModule(cm *modules.ConfigModule) {
+	r.configModule = cm
+	if cm != nil {
+		r.L.PreloadModule("config", cm.Loader)
+	}
+}
+
 // requestRefresh triggers a display refresh from within a script.
 func (r *ScriptRunner) requestRefresh() {
 	r.mu.RLock()
@@ -296,20 +316,6 @@ func (r *ScriptRunner) requestRefresh() {
 	if cb != nil {
 		cb()
 	}
-}
-
-// getTable gets a table from the pool.
-func (r *ScriptRunner) getTable() *lua.LTable {
-	return r.tablePool.Get().(*lua.LTable)
-}
-
-// putTable returns a table to the pool after clearing it.
-func (r *ScriptRunner) putTable(tbl *lua.LTable) {
-	// Clear all keys from the table
-	tbl.ForEach(func(key, value lua.LValue) {
-		tbl.RawSet(key, lua.LNil)
-	})
-	r.tablePool.Put(tbl)
 }
 
 // HasBackground returns true if script defines background().
@@ -572,26 +578,6 @@ func (r *ScriptRunner) runBackgroundCoroutine() (bool, int, error) {
 	}
 
 	return false, sleepMs, nil
-}
-
-// callBackground executes the background function directly (no coroutine).
-func (r *ScriptRunner) callBackground() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	fn := r.module.RawGetString("background")
-	if fn.Type() != lua.LTFunction {
-		return nil
-	}
-
-	r.L.Push(fn)
-	r.L.Push(r.state)
-
-	if err := r.L.PCall(1, 0, nil); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // StopBackground stops the background worker.

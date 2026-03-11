@@ -1,0 +1,69 @@
+{
+  "pages": [
+    {
+      "name": "Main",
+      "buttons": [
+        {
+          "slot": 0,
+          "label": "HOME",
+          "action": "home",
+          "icon": "pkg://riverdeck/icons/home.svg"
+        },
+        {
+          "slot": 1,
+          "label": "Media",
+          "action": "page",
+          "target_page": "Media",
+          "icon": "pkg://riverdeck/icons/folder.svg"
+        },
+        {
+          "slot": 2,
+          "label": "System",
+          "action": "page",
+          "target_page": "System",
+          "icon": "pkg://riverdeck/icons/folder.svg"
+        },
+        {
+          "slot": 14,
+          "label": "Settings",
+          "action": "settings",
+          "icon": "pkg://riverdeck/icons/settings.svg"
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "buttons": [
+        {
+          "slot": 0,
+          "label": "HOME",
+          "action": "home",
+          "icon": "pkg://riverdeck/icons/home.svg"
+        },
+        {
+          "slot": 5,
+          "label": "Back",
+          "action": "back",
+          "icon": "pkg://riverdeck/icons/back.svg"
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "buttons": [
+        {
+          "slot": 0,
+          "label": "HOME",
+          "action": "home",
+          "icon": "pkg://riverdeck/icons/home.svg"
+        },
+        {
+          "slot": 5,
+          "label": "Back",
+          "action": "back",
+          "icon": "pkg://riverdeck/icons/back.svg"
+        }
+      ]
+    }
+  ]
+}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"gopkg.in/yaml.v3"
 )
 
@@ -121,23 +121,14 @@ func DefaultConfig() *Config {
 }
 
 // ConfigDir returns the configuration directory to use.
+// Delegates to the shared platform.ConfigDir() implementation.
+//
 // If override is non-empty it is returned as-is; otherwise the platform default:
 //
 //	Windows : %APPDATA%\.riverdeck
 //	Other   : $HOME/.config/riverdeck
 func ConfigDir(override string) string {
-	if override != "" {
-		return override
-	}
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, ".riverdeck")
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".config", "riverdeck")
-	}
-	return ".riverdeck"
+	return platform.ConfigDir(override)
 }
 
 // LoadConfig reads config.yml from dir, creating it with defaults when absent.

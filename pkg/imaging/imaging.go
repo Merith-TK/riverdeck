@@ -17,6 +17,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
 )
 
 // ImageCache caches loaded images to avoid repeated disk/network reads.
@@ -109,10 +112,70 @@ func (c *ImageCache) Clear() {
 // Global image cache (100 MB default)
 var globalImageCache = NewImageCache(100)
 
+const svgDefaultSize = 256 // rasterisation resolution for SVG files
+
+// loadSVGAsImage rasterises an SVG file (local path or http/https URL) to an
+// RGBA image at svgDefaultSize x svgDefaultSize pixels.
+func loadSVGAsImage(pathOrURL string) (image.Image, error) {
+	var localPath string
+
+	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
+		// Download to a temporary file so oksvg can parse it.
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(pathOrURL)
+		if err != nil {
+			return nil, fmt.Errorf("svg: failed to fetch %s: %w", pathOrURL, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("svg: HTTP %d fetching %s", resp.StatusCode, pathOrURL)
+		}
+		tmpFile, err := os.CreateTemp("", "riverdeck-svg-*.svg")
+		if err != nil {
+			return nil, fmt.Errorf("svg: temp file: %w", err)
+		}
+		tmpPath := tmpFile.Name()
+		defer os.Remove(tmpPath)
+		if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+			tmpFile.Close()
+			return nil, fmt.Errorf("svg: writing temp file: %w", err)
+		}
+		tmpFile.Close()
+		localPath = tmpPath
+	} else {
+		localPath = pathOrURL
+	}
+
+	icon, err := oksvg.ReadIcon(localPath, oksvg.WarnErrorMode)
+	if err != nil {
+		return nil, fmt.Errorf("svg: parse %s: %w", pathOrURL, err)
+	}
+
+	w, h := svgDefaultSize, svgDefaultSize
+	icon.SetTarget(0, 0, float64(w), float64(h))
+
+	rgba := image.NewRGBA(image.Rect(0, 0, w, h))
+	scanner := rasterx.NewScannerGV(w, h, rgba, rgba.Bounds())
+	dasher := rasterx.NewDasher(w, h, scanner)
+	icon.Draw(dasher, 1.0)
+
+	return rgba, nil
+}
+
 // LoadImage loads an image from a file path or URL.
-// Supports PNG, JPEG, and GIF formats. Uses caching for repeated loads.
+// Supports PNG, JPEG, GIF, and SVG formats. Uses caching for repeated loads.
 func LoadImage(path string) (image.Image, error) {
 	if img, ok := globalImageCache.Get(path); ok {
+		return img, nil
+	}
+
+	// SVG is handled separately (needs rasterisation, not a stream decode).
+	if strings.ToLower(filepath.Ext(path)) == ".svg" {
+		img, err := loadSVGAsImage(path)
+		if err != nil {
+			return nil, err
+		}
+		globalImageCache.Set(path, img)
 		return img, nil
 	}
 

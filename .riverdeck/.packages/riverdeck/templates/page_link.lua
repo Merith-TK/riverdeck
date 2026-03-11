@@ -1,0 +1,6 @@
+-- riverdeck/templates/page_link.lua
+-- Page-link key: navigates to a named page.
+-- Assign action="page" and target_page="YourPageName" to this button.
+--
+-- This file is intentionally minimal as the page navigation is handled by
+-- the Riverdeck engine itself when action="page" is set.

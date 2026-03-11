@@ -81,6 +81,10 @@ type ScriptManager struct {
 	// Boot animation
 	bootScriptPath string
 
+	// installedPackages is the result of ScanPackages from the last Boot() call.
+	// Exposed via Packages() for the editor server.
+	installedPackages []*ScannedPackage
+
 	// Callback when passive wants to update a key
 	onKeyUpdate func(keyIndex int, appearance *KeyAppearance)
 
@@ -115,6 +119,13 @@ func (m *ScriptManager) SetKeyUpdateCallback(cb func(keyIndex int, appearance *K
 	m.onKeyUpdate = cb
 }
 
+// Packages returns the installed packages discovered during the last Boot() call.
+func (m *ScriptManager) Packages() []*ScannedPackage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.installedPackages
+}
+
 // Boot scans the config directory and loads all scripts.
 // Runs boot animation if _boot.lua exists, then loads all scripts.
 func (m *ScriptManager) Boot(ctx context.Context) error {
@@ -127,6 +138,9 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 	if pkgErr != nil {
 		fmt.Printf("[!] Warning: failed to scan packages: %v\n", pkgErr)
 	}
+	m.mu.Lock()
+	m.installedPackages = packages
+	m.mu.Unlock()
 	if len(packages) > 0 {
 		fmt.Printf("[*] Installed packages (%d):\n", len(packages))
 		installedIDs := make(map[string]bool, len(packages))

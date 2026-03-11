@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"sync"
 
 	"github.com/merith-tk/riverdeck/pkg/prober"
@@ -94,15 +95,15 @@ func buildInputSpec(result prober.ProbeResult) []*InputSpec {
 }
 
 func labelButton(i int) string {
-	return "Button " + itoa(i+1)
+	return "Button " + strconv.Itoa(i+1)
 }
 
 func labelDial(d int, dir string) string {
-	return "Dial " + itoa(d+1) + " " + dir
+	return "Dial " + strconv.Itoa(d+1) + " " + dir
 }
 
 func labelTouch(t int) string {
-	return "Touch " + itoa(t+1)
+	return "Touch " + strconv.Itoa(t+1)
 }
 
 // allDone returns true when every InputSpec in the slice is Done.
@@ -113,30 +114,4 @@ func allDone(specs []*InputSpec) bool {
 		}
 	}
 	return len(specs) > 0
-}
-
-func itoa(n int) string {
-	return intToString(n)
-}
-
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	pos := len(buf)
-	for n > 0 {
-		pos--
-		buf[pos] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		pos--
-		buf[pos] = '-'
-	}
-	return string(buf[pos:])
 }
