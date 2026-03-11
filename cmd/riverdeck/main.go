@@ -11,6 +11,7 @@ var configDir = flag.String("configdir", "", "Configuration directory path")
 var simAddr = flag.String("sim", "", "Connect to riverdeck-simulator at host:port instead of real hardware")
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	flag.Parse()
 
 	for {

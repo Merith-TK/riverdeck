@@ -58,11 +58,13 @@ const webpageTemplate = `<!DOCTYPE html>
       border: 2px solid #3a3a3e;
       transition: border-color 0.07s, transform 0.07s, filter 0.07s;
       user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: none;
     }
     .key:hover             { border-color: #666; }
     .key.pressed           { border-color: #fff; transform: scale(0.93); filter: brightness(1.3); }
 
-    .key canvas, .key img  { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .key canvas, .key img  { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
 
     .key-index {
       position: absolute;
@@ -210,6 +212,9 @@ const webpageTemplate = `<!DOCTYPE html>
       }).catch(() => {});
     }
 
+    // Track active touches by identifier for document-level release handling.
+    const activeTouches = new Map(); // touch.identifier -> key index
+
     document.querySelectorAll('.key').forEach(cell => {
       const idx = parseInt(cell.dataset.index, 10);
 
@@ -230,17 +235,38 @@ const webpageTemplate = `<!DOCTYPE html>
         }
       });
 
-      // Touch support
+      // Touch support -- touchstart only; end/cancel are handled at document
+      // level (below) via touch identifiers so that a DOM re-render while a
+      // finger is down (e.g. entering the settings screen) does not swallow
+      // the touchend and leave the key stuck as "held".
       cell.addEventListener('touchstart', ev => {
         ev.preventDefault();
+        for (const touch of ev.changedTouches) {
+          activeTouches.set(touch.identifier, idx);
+        }
         cell.classList.add('pressed');
         sendKey(idx, true);
       }, { passive: false });
-      cell.addEventListener('touchend', ev => {
-        ev.preventDefault();
-        cell.classList.remove('pressed');
+    });
+
+    // Document-level touch-end/cancel: resolves the touch by identifier so
+    // the release is delivered even when the originating cell re-rendered.
+    function releaseTouches(touchList) {
+      const cells = document.querySelectorAll('.key');
+      for (const touch of touchList) {
+        const idx = activeTouches.get(touch.identifier);
+        if (idx === undefined) continue;
+        activeTouches.delete(touch.identifier);
+        if (cells[idx]) cells[idx].classList.remove('pressed');
         sendKey(idx, false);
-      }, { passive: false });
+      }
+    }
+    document.addEventListener('touchend', ev => {
+      ev.preventDefault();
+      releaseTouches(ev.changedTouches);
+    }, { passive: false });
+    document.addEventListener('touchcancel', ev => {
+      releaseTouches(ev.changedTouches);
     });
 
     // Prevent right-click context menus on key cells.

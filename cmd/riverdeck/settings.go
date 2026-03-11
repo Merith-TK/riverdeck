@@ -5,19 +5,27 @@ package main
 // The settings page is a virtual overlay (not a real folder) that appears when
 // the user presses the reserved back/settings key while at the navigation root.
 //
-// Layout adapts automatically to the connected device width. For illustration,
-// a 5-col MK.2 example (cc = contentCols = cols-1 = 4) looks like:
+// Pagination mirrors normal navigation:
+//   - Back key: exits settings when on page 0; shows PG^ and goes to the
+//     previous settings page when on page > 0.
+//   - T1  key: shows PGv and advances to the next settings page when more
+//     pages exist; otherwise shown dim (inert).
+//   - T2  key: always dim / free - never consumed by settings pagination.
 //
-//	Col 0 (reserved)  Col 1      Col 2      Col 3      Col 4
-//	Row 0:  [BACK]   [EXIT]    [     ]   [RELOAD]  [CFGDIR]
-//	Row 1:  [T1  ]   [BRT-]   [B:XX%]   [BRT+]    [     ]
-//	Row 2:  [T2  ]   [TMO-]   [T:XXs]   [TMO+]    [     ]
+// Page layout by device size:
 //
-// On an XL (8 cols, cc=7):
+// 3+ rows (MK.2, XL, ...) -- single page, all controls visible at once:
 //
-//	Row 0:  [BACK]  [EXIT] [ ] [RELOAD] [ ] [ ] [ ] [CFGDIR]
-//	Row 1:  [T1  ]  [BRT-] [B:XX%] [BRT+] ...
-//	Row 2:  [T2  ]  [TMO-] [T:XXs] [TMO+] ...
+//	Row 0:  [<-/SET] [EXIT] [..] [RELOAD] [..] [CFGDIR]
+//	Row 1:  [T1 dim] [BRT-] [B:XX%] [BRT+]
+//	Row 2:  [T2 dim] [TMO-] [T:XXs] [TMO+]
+//
+// 2 rows (Neo, smol, ...) -- two pages:
+//
+//	Page 0  Row 0: [<-]   [EXIT] [RELOAD] [CFGDIR]
+//	        Row 1: [PGv]  [BRT-] [B:XX%]  [BRT+]
+//	Page 1  Row 0: [PG^]  [EXIT] [RELOAD] [CFGDIR]
+//	        Row 1: [dim]  [TMO-] [T:XXs]  [TMO+]
 //
 // Brightness steps: ±5, clamped to [5, 100].
 // Timeout cycles:   0 (never) -> 30 -> 60 -> 120 -> 300 -> 0 ...
@@ -38,13 +46,8 @@ var timeoutValues = []int{0, 30, 60, 120, 300}
 
 // settingsLayout holds dynamically-computed content-key slot indices for the
 // settings screen. Slots index into the contentKeys slice (left-to-right, row
-// by row, col-0 reserved keys excluded).
-//
-// Layout (per row, where cc = contentCols = device.Cols()-1):
-//
-//	Row 0 (system)    : EXIT=0, <empty>=1, RELOAD=2, ..., CFGDIR=cc-1
-//	Row 1 (brightness): BRT-=cc,   B:XX%=cc+1, BRT+=cc+2
-//	Row 2 (timeout)   : TMO-=2cc, T:XXs=2cc+1, TMO+=2cc+2
+// by row, col-0 reserved keys excluded). A value of -1 means the control is
+// disabled/hidden on the current device.
 type settingsLayout struct {
 	exit    int
 	reload  int
@@ -57,31 +60,67 @@ type settingsLayout struct {
 	tmoUp   int
 }
 
-// calcSettingsLayout returns slot indices computed for the current device geometry.
-// All slot indices are into the contentKeys slice (col-0 reserved keys excluded).
+// settingsPageCount returns the total number of settings pages for this device.
+// Devices with 3+ rows can show all controls on a single page.
+// Smaller devices paginate: page 0 = brightness, page 1 = timeout.
+func (a *App) settingsPageCount() int {
+	if a.device.Rows() >= 3 {
+		return 1
+	}
+	return 2
+}
+
+// calcSettingsLayout returns slot indices into the contentKeys slice for every
+// settings control, computed from the current device geometry and active settings page.
 //
-// For very narrow devices (cc < 3) there is not enough room on row 0 for both
-// RELOAD and CFGDIR; in that case RELOAD is placed on row 1 and the brightness
-// controls shift to row 2. On cc >= 3 everything fits on its natural row.
+// System row (row 0) column assignments by content-col count (cc = Cols()-1):
+//   - cc >= 4 : [EXIT] [ ] [RELOAD] ... [CFGDIR]  (CFGDIR at far right)
+//   - cc == 3 : [EXIT] [RELOAD] [CFGDIR]           (tight fit, no gap)
+//   - cc == 2 : [EXIT] [CFGDIR]                    (RELOAD disabled)
+//   - cc == 1 : [EXIT]                              (everything else disabled)
+//
+// Control rows:
+//   - rows >= 3 : brightness on row 1, timeout on row 2 (single page)
+//   - rows == 2 : one control row; page 0 = brightness, page 1 = timeout
+//
+// Slot -1 means the button is disabled/hidden on this device.
 func (a *App) calcSettingsLayout() settingsLayout {
 	cc := a.device.Cols() - 1 // content columns per row
 	if cc < 1 {
 		cc = 1
 	}
+	rows := a.device.Rows()
+	page := a.settingsPage
 
-	// Row offsets
+	// Row starting offsets into contentKeys
 	row0 := 0
 	row1 := cc
 	row2 := cc * 2
 
+	// Start with everything disabled
 	sl := settingsLayout{
-		exit:    row0 + 0,
-		openDir: row0 + cc - 1,
+		exit:   row0 + 0,
+		reload: -1, openDir: -1,
+		brtDown: -1, brtVal: -1, brtUp: -1,
+		tmoDown: -1, tmoVal: -1, tmoUp: -1,
 	}
 
-	if cc >= 3 {
-		// Enough room: RELOAD on row 0, brightness on row 1, timeout on row 2.
+	// System row: RELOAD and CFGDIR positions depend on available width
+	switch {
+	case cc >= 4:
 		sl.reload = row0 + 2
+		sl.openDir = row0 + cc - 1 // far right
+	case cc == 3:
+		sl.reload = row0 + 1 // tight: EXIT RELOAD CFGDIR
+		sl.openDir = row0 + 2
+	case cc == 2:
+		sl.openDir = row0 + 1 // EXIT CFGDIR (no room for reload)
+		// cc == 1: EXIT only
+	}
+
+	// Control rows
+	if rows >= 3 {
+		// All controls fit on one page
 		sl.brtDown = row1 + 0
 		sl.brtVal = row1 + 1
 		sl.brtUp = row1 + 2
@@ -89,22 +128,25 @@ func (a *App) calcSettingsLayout() settingsLayout {
 		sl.tmoVal = row2 + 1
 		sl.tmoUp = row2 + 2
 	} else {
-		// Narrow device (e.g. Mini 3-col, cc=2): push everything down one row.
-		sl.reload = row1 + 0
-		sl.brtDown = row2 + 0
-		sl.brtVal = row2 + 1
-		sl.brtUp = row2 + cc - 1 // last of row 2 if only 2 content cols
-		sl.tmoDown = cc*3 + 0
-		sl.tmoVal = cc*3 + 1
-		sl.tmoUp = cc*3 + cc - 1
+		// 2-row device: paginate the control row
+		if page == 0 {
+			sl.brtDown = row1 + 0
+			sl.brtVal = row1 + 1
+			sl.brtUp = row1 + 2
+		} else {
+			sl.tmoDown = row1 + 0
+			sl.tmoVal = row1 + 1
+			sl.tmoUp = row1 + 2
+		}
 	}
+
 	return sl
 }
 
 // enterSettings switches the App into settings mode and renders the settings page.
 func (a *App) enterSettings() {
 	a.inSettings = true
-	fmt.Println("[*] Entering settings menu")
+	log.Println("[*] Entering settings menu")
 	a.renderSettingsPage()
 }
 
@@ -112,7 +154,7 @@ func (a *App) enterSettings() {
 func (a *App) exitSettings() {
 	a.inSettings = false
 	a.exitConfirming = false
-	fmt.Println("[*] Exiting settings menu")
+	log.Println("[*] Exiting settings menu")
 
 	// Re-render the regular navigation page
 	if err := a.nav.RenderPage(); err != nil {
@@ -135,26 +177,33 @@ func (a *App) renderSettingsPage() {
 		a.device.SetKeyColor(i, color.RGBA{0, 0, 0, 255})
 	}
 
-	// Reserved col-0 key: back arrow to exit settings
-	backImg := a.nav.CreateTextImageWithColors("<-", color.RGBA{100, 100, 100, 255}, color.White)
-	a.device.SetImage(a.nav.BackKey(), backImg)
-
-	// T1 / T2 are page-scroll arrows for settings.
-	// Currently there is only one settings page so they are shown dimmed.
-	const totalSettingsPages = 1
+	// Reserved col-0 key.
+	// Mirrors normal navigation: PG^ when on a page past the first, otherwise <-.
 	if a.settingsPage > 0 {
-		t1Img := a.nav.CreateTextImageWithColors("PG^", color.RGBA{80, 80, 80, 255}, color.White)
-		a.device.SetImage(a.nav.Toggle1Key(), t1Img)
+		backImg := a.nav.CreateTextImageWithColors("PG^", color.RGBA{60, 60, 60, 255}, color.White)
+		a.device.SetImage(a.nav.BackKey(), backImg)
 	} else {
-		t1Img := a.nav.CreateTextImageWithColors("PG^", color.RGBA{30, 30, 30, 255}, color.RGBA{80, 80, 80, 255})
-		a.device.SetImage(a.nav.Toggle1Key(), t1Img)
+		backImg := a.nav.CreateTextImageWithColors("<-", color.RGBA{100, 100, 100, 255}, color.White)
+		a.device.SetImage(a.nav.BackKey(), backImg)
 	}
-	if a.settingsPage < totalSettingsPages-1 {
-		t2Img := a.nav.CreateTextImageWithColors("PGv", color.RGBA{80, 80, 80, 255}, color.White)
-		a.device.SetImage(a.nav.Toggle2Key(), t2Img)
-	} else {
-		t2Img := a.nav.CreateTextImageWithColors("PG▼", color.RGBA{30, 30, 30, 255}, color.RGBA{80, 80, 80, 255})
-		a.device.SetImage(a.nav.Toggle2Key(), t2Img)
+
+	// T1: PGv when more settings pages exist ahead; dim otherwise.
+	// T2: always dim/free -- never consumed by settings pagination.
+	totalPages := a.settingsPageCount()
+	t1Key := a.nav.Toggle1Key()
+	t2Key := a.nav.Toggle2Key()
+	if t1Key < totalKeys {
+		if a.settingsPage < totalPages-1 {
+			t1Img := a.nav.CreateTextImageWithColors("PGv", color.RGBA{60, 60, 60, 255}, color.White)
+			a.device.SetImage(t1Key, t1Img)
+		} else {
+			t1Img := a.nav.CreateTextImageWithColors("T1", color.RGBA{30, 30, 30, 255}, color.RGBA{80, 80, 80, 255})
+			a.device.SetImage(t1Key, t1Img)
+		}
+	}
+	if t2Key < totalKeys {
+		t2Img := a.nav.CreateTextImageWithColors("T2", color.RGBA{30, 30, 30, 255}, color.RGBA{80, 80, 80, 255})
+		a.device.SetImage(t2Key, t2Img)
 	}
 
 	// Helper to set a content key by slot index.
@@ -192,26 +241,30 @@ func (a *App) renderSettingsPage() {
 
 // handleSettingsKeyEvent processes a key press while in settings mode.
 func (a *App) handleSettingsKeyEvent(keyIndex int) error {
-	// Back key: leave settings
+	totalPages := a.settingsPageCount()
+
+	// Back key: go to previous settings page when past page 0; exit settings on page 0.
 	if keyIndex == a.nav.BackKey() {
+		if a.settingsPage > 0 {
+			a.settingsPage--
+			a.renderSettingsPage()
+			return nil
+		}
 		a.exitSettings()
 		return nil
 	}
 
-	// T1/T2 scroll through settings pages (future expansion; no-op on single page)
-	const totalSettingsPages = 1
+	// T1: advance to next settings page when more exist; inert otherwise.
 	if keyIndex == a.nav.Toggle1Key() {
-		if a.settingsPage > 0 {
-			a.settingsPage--
+		if a.settingsPage < totalPages-1 {
+			a.settingsPage++
 			a.renderSettingsPage()
 		}
 		return nil
 	}
-	if keyIndex == a.nav.Toggle2Key() {
-		if a.settingsPage < totalSettingsPages-1 {
-			a.settingsPage++
-			a.renderSettingsPage()
-		}
+
+	// T2: never used for settings pagination -- ignore.
+	if t2Key := a.nav.Toggle2Key(); t2Key < a.device.Keys() && keyIndex == t2Key {
 		return nil
 	}
 
@@ -255,7 +308,7 @@ func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 			}()
 		} else {
 			// Second press: confirmed - flash only the EXIT key, then quit.
-			fmt.Println("[*] EXIT confirmed - shutting down")
+			log.Println("[*] EXIT confirmed - shutting down")
 			if sl.exit < len(contentKeys) {
 				img := a.nav.CreateTextImageWithColors("BYE",
 					color.RGBA{180, 0, 0, 255},
@@ -267,7 +320,7 @@ func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 		}
 		return nil
 	case sl.reload:
-		fmt.Println("[*] RELOAD pressed - restarting")
+		log.Println("[*] RELOAD pressed - restarting")
 		if sl.reload < len(contentKeys) {
 			img := a.nav.CreateTextImageWithColors("...",
 				color.RGBA{80, 60, 0, 255},
@@ -279,7 +332,7 @@ func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 		a.cancel()
 		return nil
 	case sl.openDir:
-		fmt.Printf("[*] Opening config directory: %s\n", a.configPath)
+		log.Printf("[*] Opening config directory: %s", a.configPath)
 		if err := openConfigDir(a.configPath); err != nil {
 			log.Printf("openConfigDir: %v", err)
 		}
@@ -318,7 +371,7 @@ func (a *App) adjustBrightness(delta int) {
 	if err := a.device.SetBrightness(v); err != nil {
 		log.Printf("SetBrightness: %v", err)
 	}
-	fmt.Printf("[*] Brightness -> %d%%\n", v)
+	log.Printf("[*] Brightness -> %d%%", v)
 }
 
 // stepTimeout advances (delta=+1) or retreats (delta=-1) through timeoutValues.
@@ -333,15 +386,14 @@ func (a *App) stepTimeout(delta int) {
 	}
 	idx = (idx + delta + len(timeoutValues)) % len(timeoutValues)
 	a.config.Application.Timeout = timeoutValues[idx]
-	fmt.Printf("[*] Timeout -> %s\n", fmtTimeout(a.config.Application.Timeout))
+	log.Printf("[*] Timeout -> %s", fmtTimeout(a.config.Application.Timeout))
 	// Reset the sleep timer with the new value
 	a.resetSleepTimer()
 }
 
 // persistConfig writes the current config to disk.
 func (a *App) persistConfig() {
-	cfgFile := filepath.Join(a.configPath, "config.yml")
-	if err := SaveConfig(a.config, cfgFile); err != nil {
+	if err := SaveConfig(a.config, a.configPath); err != nil {
 		log.Printf("SaveConfig: %v", err)
 	}
 }

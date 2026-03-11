@@ -5,7 +5,7 @@ package main
 // Extracted from app.go for clarity. All methods operate on *App.
 
 import (
-	"fmt"
+	"log"
 	"time"
 )
 
@@ -30,7 +30,7 @@ func (a *App) resetSleepTimer() {
 		defer a.sleepMu.Unlock()
 		if !a.sleeping {
 			a.sleeping = true
-			fmt.Println("[*] Display sleeping (timeout)")
+			log.Println("[*] Display sleeping (timeout)")
 			_ = a.device.SetBrightness(0)
 		}
 	})
@@ -46,7 +46,7 @@ func (a *App) wakeDisplay() bool {
 		return false
 	}
 	a.sleeping = false
-	fmt.Println("[*] Display waking up")
+	log.Println("[*] Display waking up")
 	_ = a.device.SetBrightness(a.config.Application.Brightness)
 	return true
 }

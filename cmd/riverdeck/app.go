@@ -110,20 +110,20 @@ func (a *App) Init(configDir string, simAddr string) error {
 	}
 	a.config = config
 
-	fmt.Printf("\n[*] Config directory: %s\n", absDir)
-	fmt.Printf("[*] Configuration loaded\n")
+	log.Printf("[*] Config directory: %s", absDir)
+	log.Printf("[*] Configuration loaded")
 
 	// Open device: real hardware or simulator.
 	var dev streamdeck.DeviceIface
 	if simAddr != "" {
-		fmt.Printf("\n[*] Simulator mode: connecting to %s ...\n", simAddr)
+		log.Printf("[*] Simulator mode: connecting to %s ...", simAddr)
 		sc, err := streamdeck.ConnectSim(simAddr)
 		if err != nil {
 			return fmt.Errorf("failed to connect to simulator: %w", err)
 		}
 		dev = sc
 		a.simMode = true
-		fmt.Printf("[*] Simulator ready: %s (%dx%d, %d keys)\n",
+		log.Printf("[*] Simulator ready: %s (%dx%d, %d keys)",
 			sc.ModelName(), sc.Cols(), sc.Rows(), sc.Keys())
 	} else {
 		// Initialize the streamdeck library
@@ -132,7 +132,7 @@ func (a *App) Init(configDir string, simAddr string) error {
 		}
 
 		// Probe for all Stream Deck devices
-		fmt.Println("\n[*] Scanning for Stream Deck devices...")
+		log.Println("[*] Scanning for Stream Deck devices...")
 
 		devices, err := streamdeck.Enumerate()
 		if err != nil {
@@ -190,10 +190,10 @@ func (a *App) Init(configDir string, simAddr string) error {
 		log.Printf("SetBrightness failed: %v", err)
 	}
 
-	fmt.Printf("\n[*] Config directory: %s\n", a.configPath)
+	log.Printf("[*] Config directory: %s", a.configPath)
 
 	// Create script manager and boot (loads scripts, starts background workers)
-	fmt.Println("[*] Booting script manager...")
+	log.Println("[*] Booting script manager...")
 	a.scriptMgr = scripting.NewScriptManager(dev, absDir, a.config.Application.PassiveFPS)
 
 	// Create a context for the entire application
@@ -297,7 +297,7 @@ func (a *App) Run() error {
 	}
 
 	// Render initial page
-	fmt.Println("[*] Loading page...")
+	log.Println("[*] Loading page...")
 	a.scriptMgr.SetVisibleScripts(nil) // Clear before render
 	if err := a.nav.RenderPage(); err != nil {
 		log.Printf("Warning: RenderPage failed: %v", err)
@@ -306,14 +306,14 @@ func (a *App) Run() error {
 	// Show current path
 	page, _ := a.nav.LoadPage()
 	if page != nil {
-		fmt.Printf("[*] Current: %s (%d items, page %d/%d)\n",
+		log.Printf("[*] Current: %s (%d items, page %d/%d)",
 			page.Path, len(page.Items), page.PageIndex+1, page.TotalPages)
 	}
 
-	fmt.Println("\n[*] Navigation ready (Ctrl+C to exit)...")
-	fmt.Println("    - Column 0: Reserved (Back/<SET>, Toggle1, Toggle2)")
-	fmt.Println("    - Columns 1-4: Folder/action buttons")
-	fmt.Println("    - Press '<-' to go back; press 'SET' at root to open settings")
+	log.Println("[*] Navigation ready (Ctrl+C to exit)...")
+	log.Println("    - Column 0: Reserved (Back/<SET>, Toggle1, Toggle2)")
+	log.Println("    - Columns 1-4: Folder/action buttons")
+	log.Println("    - Press '<-' to go back; press 'SET' at root to open settings")
 
 	// Initialise the activity timer and last-activity timestamp.
 	a.lastActivity = time.Now()
@@ -416,15 +416,27 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 		return a.handleSettingsKeyEvent(event.Key)
 	}
 
-	// At root, the back/settings key opens the settings menu.
-	if event.Key == streamdeck.KeyBack && a.nav.IsAtRoot() {
+	// At root on page 0, the back key opens the settings menu.
+	// On page > 0 it acts as PG^ and is handled inside HandleKeyPress.
+	if event.Key == streamdeck.KeyBack && a.nav.IsAtRoot() && a.nav.PageIndex() == 0 {
 		a.enterSettings()
 		return nil
 	}
 
-	// Intercept T1/T2 BEFORE passing to the navigator so the old toggle
-	// logic inside HandleKeyPress never fires for these keys.
+	// Intercept T1/T2 BEFORE passing to the navigator.
+	// Pagination takes priority: T1 = next page when more pages exist.
 	if event.Key == a.nav.Toggle1Key() {
+		if a.nav.NextPage() {
+			// Page changed -- same re-render path as any navigation.
+			a.stopAllGIFAnims()
+			a.scriptMgr.SetVisibleScripts(nil)
+			if err := a.nav.RenderPage(); err != nil {
+				log.Printf("RenderPage failed: %v", err)
+			}
+			a.updateVisibleScripts()
+			return nil
+		}
+		// No next page: T1 is free for scripts.
 		if a.scriptMgr.HasT1Script() {
 			go func() {
 				if err := a.scriptMgr.TriggerT1(); err != nil {
@@ -432,9 +444,9 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 				}
 			}()
 		}
-		// No script assigned: key is reserved/inert.
 		return nil
 	}
+	// T2 is never consumed by pagination.
 	if event.Key == a.nav.Toggle2Key() {
 		if a.scriptMgr.HasT2Script() {
 			go func() {
@@ -443,7 +455,6 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 				}
 			}()
 		}
-		// No script assigned: key is reserved/inert.
 		return nil
 	}
 
@@ -475,13 +486,13 @@ func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
 			} else {
 				relPath = "/" + relPath
 			}
-			fmt.Printf("[*] Navigated to: %s (%d items)\n", relPath, len(page.Items))
+			log.Printf("[*] Navigated to: %s (%d items)", relPath, len(page.Items))
 		}
 	} else if item != nil {
 		// Action/script triggered
-		fmt.Printf("[*] Action triggered: %s\n", item.Name)
+		log.Printf("[*] Action triggered: %s", item.Name)
 		if item.Script != "" {
-			fmt.Printf("    Script: %s\n", item.Script)
+			log.Printf("    Script: %s", item.Script)
 			// Run trigger asynchronously so the event loop never blocks waiting
 			// for a slow trigger function (HTTP, shell, sleep, etc.)
 			scriptPath := item.Script
@@ -528,9 +539,9 @@ func (a *App) updateVisibleScripts() {
 // held == false -> back key just came up
 func (a *App) handleBackHoldChange(held bool) {
 	if held {
-		fmt.Println("[*] Back key held - input lock active")
+		log.Println("[*] Back key held - input lock active")
 	} else {
-		fmt.Println("[*] Back key released - input lock cleared")
+		log.Println("[*] Back key released - input lock cleared")
 	}
 }
 

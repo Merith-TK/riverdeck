@@ -170,9 +170,15 @@ func SaveConfig(cfg *Config, dir string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	data, err := yaml.Marshal(cfg)
+	f, err := os.Create(filepath.Join(dir, "config.yml"))
 	if err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+	defer f.Close()
+	enc := yaml.NewEncoder(f)
+	enc.SetIndent(2)
+	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-	return os.WriteFile(filepath.Join(dir, "config.yml"), data, 0644)
+	return enc.Close()
 }

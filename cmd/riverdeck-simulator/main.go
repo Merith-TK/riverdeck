@@ -32,6 +32,7 @@ func main() {
 	probeIndex := flag.Int("index", 0, "Index of the device entry to simulate when the probe file contains multiple devices")
 	tcpPort := flag.Int("port", 7001, "TCP port for riverdeck to connect to  (riverdeck --sim localhost:<port>)")
 	httpPort := flag.Int("http", 7002, "HTTP port for the browser UI")
+	httpAddr := flag.String("http-addr", "localhost", "Address to bind the HTTP server to (default: localhost)")
 	noOpen := flag.Bool("no-open", false, "Do not automatically open the browser")
 	flag.Parse()
 
@@ -73,9 +74,9 @@ func main() {
 	// Give servers a moment to bind.
 	time.Sleep(200 * time.Millisecond)
 
-	browserURL := fmt.Sprintf("http://localhost:%d", *httpPort)
+	browserURL := fmt.Sprintf("http://%s:%d", *httpAddr, *httpPort)
 	log.Printf("Browser UI: %s", browserURL)
-	log.Printf("Connect riverdeck with: riverdeck --sim localhost:%d", *tcpPort)
+	log.Printf("Connect riverdeck with: riverdeck --sim %s:%d", *httpAddr, *tcpPort)
 
 	if !*noOpen {
 		openBrowser(browserURL)

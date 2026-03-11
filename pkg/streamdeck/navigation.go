@@ -308,6 +308,11 @@ func (n *Navigator) NavigateToRoot() {
 	n.pageIndex = 0
 }
 
+// PageIndex returns the current page index (0-based).
+func (n *Navigator) PageIndex() int {
+	return n.pageIndex
+}
+
 // NextPage moves to the next page.
 func (n *Navigator) NextPage() bool {
 	page, err := n.LoadPage()
@@ -333,6 +338,14 @@ func (n *Navigator) PrevPage() bool {
 // RenderPage renders the current page to the Stream Deck.
 // Images are encoded concurrently, then written to the device serially.
 // No Clear() pass is needed -- every key is explicitly overwritten.
+//
+// Reserved column behaviour:
+//   - Back key (col 0, row 0): shows PG^ when pageIndex > 0 (pagination priority),
+//     otherwise shows "<-" when inside a folder, or "SET" at root.
+//   - T1  key (col 0, row 1): shows PGv when more pages exist ahead,
+//     otherwise shows dim "T1" which a .directory.lua passive script can repaint.
+//   - T2  key (col 0, row 2): always shows dim "T2" for script use; T2 is never
+//     consumed by pagination because Back+T1 already cover both directions.
 func (n *Navigator) RenderPage() error {
 	page, err := n.LoadPage()
 	if err != nil {
@@ -355,17 +368,24 @@ func (n *Navigator) RenderPage() error {
 	images := make([]image.Image, totalKeys)
 
 	// Reserved column
-	if !n.IsAtRoot() {
+	if page.PageIndex > 0 {
+		// Paginated: back key becomes PG^ (go to previous page).
+		images[n.BackKey()] = n.CreateTextImageWithColors("PG^", color.RGBA{60, 60, 60, 255}, color.White)
+	} else if !n.IsAtRoot() {
 		images[n.BackKey()] = n.createTextImage("<-", color.RGBA{100, 100, 100, 255})
 	} else {
 		// At root the back key doubles as the settings entry point
 		images[n.BackKey()] = n.CreateTextImageWithColors("SET", color.RGBA{120, 80, 0, 255}, color.RGBA{255, 200, 50, 255})
 	}
-	// T1 / T2: render a dim default; passive scripts from .directory.lua
-	// will paint over these via the key-update callback.
+	// T1: PGv when more pages exist, otherwise dim slot for scripts.
 	if t1 := n.Toggle1Key(); t1 < totalKeys {
-		images[t1] = n.createTextImage("T1", color.RGBA{30, 30, 30, 255})
+		if page.PageIndex < page.TotalPages-1 {
+			images[t1] = n.CreateTextImageWithColors("PGv", color.RGBA{60, 60, 60, 255}, color.White)
+		} else {
+			images[t1] = n.createTextImage("T1", color.RGBA{30, 30, 30, 255})
+		}
 	}
+	// T2 is never consumed by pagination; always available for scripts.
 	if t2 := n.Toggle2Key(); t2 < totalKeys {
 		images[t2] = n.createTextImage("T2", color.RGBA{30, 30, 30, 255})
 	}
@@ -422,24 +442,40 @@ func (n *Navigator) RenderPage() error {
 }
 
 // renderReservedKeys renders the reserved column buttons (column 0).
-// Key indices are computed dynamically so this works correctly on all device sizes.
+// NOTE: this is a convenience helper for one-off refreshes; RenderPage already
+// contains the same logic for full-page redraws.
 func (n *Navigator) renderReservedKeys() {
-	// Key 0 (row 0, col 0): Back button / settings entry at root
-	if !n.IsAtRoot() {
+	totalKeys := n.dev.Keys()
+
+	// Determine current page state so we can show pagination arrows.
+	var pageIdx, totalPages int
+	if p, err := n.LoadPage(); err == nil {
+		pageIdx = p.PageIndex
+		totalPages = p.TotalPages
+	}
+
+	// Back key: PG^ when past page 0; otherwise Back/<- or SET at root.
+	if pageIdx > 0 {
+		img := n.CreateTextImageWithColors("PG^", color.RGBA{60, 60, 60, 255}, color.White)
+		n.dev.SetImage(n.BackKey(), img)
+	} else if !n.IsAtRoot() {
 		img := n.createTextImage("<-", color.RGBA{100, 100, 100, 255})
 		n.dev.SetImage(n.BackKey(), img)
 	} else {
-		// At root - the key opens the settings menu
 		img := n.CreateTextImageWithColors("SET", color.RGBA{120, 80, 0, 255}, color.RGBA{255, 200, 50, 255})
 		n.dev.SetImage(n.BackKey(), img)
 	}
 
-	// T1 / T2: render a dim default; passive scripts from .directory.lua
-	// will paint over these via the key-update callback.
-	totalKeys := n.dev.Keys()
+	// T1: PGv when more pages ahead; otherwise dim T1 script slot.
 	if t1 := n.Toggle1Key(); t1 < totalKeys {
-		n.dev.SetImage(t1, n.createTextImage("T1", color.RGBA{30, 30, 30, 255}))
+		if pageIdx < totalPages-1 {
+			img := n.CreateTextImageWithColors("PGv", color.RGBA{60, 60, 60, 255}, color.White)
+			n.dev.SetImage(t1, img)
+		} else {
+			n.dev.SetImage(t1, n.createTextImage("T1", color.RGBA{30, 30, 30, 255}))
+		}
 	}
+	// T2 is always free for scripts.
 	if t2 := n.Toggle2Key(); t2 < totalKeys {
 		n.dev.SetImage(t2, n.createTextImage("T2", color.RGBA{30, 30, 30, 255}))
 	}
@@ -456,6 +492,12 @@ func (n *Navigator) HandleKeyPress(keyIndex int) (*PageItem, bool, error) {
 
 	// Check if this is a reserved key (column 0)
 	if keyIndex == n.BackKey() {
+		// Pagination takes priority: if we're not on the first page, go back a page.
+		if n.pageIndex > 0 {
+			n.pageIndex--
+			return nil, true, nil
+		}
+		// First page: normal directory navigation.
 		if n.NavigateBack() {
 			return nil, true, nil
 		}
