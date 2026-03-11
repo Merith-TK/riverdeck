@@ -59,12 +59,23 @@ type App struct {
 	// Each running animation holds a cancel func; replace/cancel it to stop.
 	gifAnimsMu sync.Mutex
 	gifAnims   map[int]context.CancelFunc
+
+	// Emergency "oh shit" kill combo: all 4 corners + center held simultaneously.
+	// panicCombo is computed from the device geometry in Init().
+	heldKeysMu sync.Mutex
+	heldKeys   map[int]bool
+	panicCombo []int
+
+	// backHeld is true while the back/home/settings key is physically held down.
+	// Transitions are dispatched to handleBackHoldChange for future system hooks.
+	backHeld bool
 }
 
 // NewApp creates a new application instance.
 func NewApp() *App {
 	return &App{
 		gifAnims: make(map[int]context.CancelFunc),
+		heldKeys: make(map[int]bool),
 	}
 }
 
@@ -138,6 +149,22 @@ func (a *App) Init(configDir string) error {
 		return fmt.Errorf("failed to open device: %w", err)
 	}
 	a.device = dev
+
+	// Compute the emergency kill combo: all 4 corners + center.
+	// Works for any device geometry (MK.2: keys 0, 4, 7, 10, 14).
+	{
+		cols := dev.Cols()
+		rows := dev.Rows()
+		center := (rows/2)*cols + (cols / 2)
+		a.panicCombo = []int{
+			0,                 // top-left corner
+			cols - 1,          // top-right corner
+			center,            // center
+			(rows - 1) * cols, // bottom-left corner
+			rows*cols - 1,     // bottom-right corner
+		}
+		log.Printf("[*] Emergency kill combo: keys %v", a.panicCombo)
+	}
 
 	// Set brightness from config
 	if err := dev.SetBrightness(a.config.Application.Brightness); err != nil {
@@ -302,8 +329,52 @@ func (a *App) Run() error {
 // handleKeyEvent processes a single key event.
 // It handles navigation, toggle states, and script triggers based on the key pressed.
 func (a *App) handleKeyEvent(event streamdeck.KeyEvent) error {
+	// ── Emergency kill combo tracking (runs on EVERY event, press or release) ──
+	// Holding all 4 corners + center simultaneously triggers an immediate hard exit.
+	// While the back/home key is held, all other key presses are suppressed so
+	// that navigating towards the combo never accidentally fires scripts.
+	a.heldKeysMu.Lock()
+	if event.Pressed {
+		a.heldKeys[event.Key] = true
+	} else {
+		delete(a.heldKeys, event.Key)
+	}
+	panicTriggered := false
+	if event.Pressed && len(a.panicCombo) > 0 {
+		allHeld := true
+		for _, k := range a.panicCombo {
+			if !a.heldKeys[k] {
+				allHeld = false
+				break
+			}
+		}
+		panicTriggered = allHeld
+	}
+	newBackHeld := a.heldKeys[streamdeck.KeyBack]
+	backTransition := newBackHeld != a.backHeld
+	if backTransition {
+		a.backHeld = newBackHeld
+	}
+	a.heldKeysMu.Unlock()
+
+	// Fire the hold-change hook outside the lock.
+	if backTransition {
+		a.handleBackHoldChange(newBackHeld)
+	}
+
+	if panicTriggered {
+		a.triggerEmergencyExit()
+		return nil
+	}
+
 	// Only handle key presses, not releases
 	if !event.Pressed {
+		return nil
+	}
+
+	// Back key acts as a modifier / lock while held: swallow any other key press
+	// so that building up the emergency combo never fires scripts or navigation.
+	if newBackHeld && event.Key != streamdeck.KeyBack {
 		return nil
 	}
 
@@ -428,6 +499,40 @@ func (a *App) updateVisibleScripts() {
 		}
 	}
 	a.scriptMgr.SetToggleScripts(t1Script, streamdeck.KeyToggle1, t2Script, streamdeck.KeyToggle2)
+}
+
+// handleBackHoldChange is called whenever the back/home key transitions between
+// held and released.  It is the designated hook for future system-level modifier
+// behaviours (e.g. showing a system overlay, starting a hold timer, etc.).
+//
+// held == true  -> back key just went down
+// held == false -> back key just came up
+func (a *App) handleBackHoldChange(held bool) {
+	if held {
+		fmt.Println("[*] Back key held - input lock active")
+	} else {
+		fmt.Println("[*] Back key released - input lock cleared")
+	}
+}
+
+// triggerEmergencyExit performs an immediate hard shutdown when the emergency
+// "oh shit" kill combo (all four corners + center key held simultaneously) is
+// detected.  It flashes all keys red so the user gets visual feedback, then
+// tears down the device and calls os.Exit(1) -- bypassing the normal shutdown
+// path to guarantee the process dies even if the event loop is stuck.
+func (a *App) triggerEmergencyExit() {
+	fmt.Println("\n[!!!] EMERGENCY EXIT: corners+center combo detected -- killing process")
+	// Flash all keys red as a visible kill indicator.
+	for i := 0; i < a.device.Model.Keys; i++ {
+		_ = a.device.SetKeyColor(i, color.RGBA{255, 0, 0, 255})
+	}
+	time.Sleep(300 * time.Millisecond)
+	// Blank the deck and tear down cleanly before hard-exiting.
+	_ = a.device.SetBrightness(0)
+	_ = a.device.Clear()
+	a.device.Close()
+	streamdeck.Exit()
+	os.Exit(1)
 }
 
 // Shutdown cleans up resources.
