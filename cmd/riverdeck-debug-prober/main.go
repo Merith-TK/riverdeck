@@ -1,6 +1,5 @@
-// Command riverdeck-debug-prober probes every connected Elgato Stream Deck device
-// and emits a rich diagnostic report (terminal + optional JSON file) containing
-// enough information to add support for unknown hardware or build a simulator.
+// Command riverdeck-debug-prober probes every connected Elgato Stream Deck device.
+// By default it opens a graphical wizard; pass -c for CLI-only terminal output.
 package main
 
 import (
@@ -10,17 +9,38 @@ import (
 	"os"
 	"time"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	"github.com/sstallion/go-hid"
 )
 
 func main() {
-	outputPath := flag.String("output", "", "Write JSON report to this file (e.g. probe.json)")
-	listenSec := flag.Int("listen", 3, "Seconds to listen for key events (0 = skip)")
-	allReports := flag.Bool("all-reports", false, "Probe all feature report IDs 0x00\u20130x2F (slower)")
+	cliMode := flag.Bool("c", false, "CLI mode: print terminal report instead of launching GUI")
+	outputPath := flag.String("output", "", "CLI: write JSON report to this file (e.g. probe.json)")
+	listenSec := flag.Int("listen", 3, "CLI: seconds to listen for key events (0 = skip)")
+	allReports := flag.Bool("all-reports", false, "CLI: probe all feature report IDs 0x00\u20130x2F (slower)")
 	flag.Parse()
 
-	listenDur := time.Duration(*listenSec) * time.Second
+	if *cliMode {
+		runCLI(*outputPath, *listenSec, *allReports)
+		return
+	}
+
+	// Default: graphical wizard.
+	a := app.New()
+	w := a.NewWindow("Stream Deck Device Prober")
+	w.Resize(fyne.NewSize(720, 520))
+	w.SetFixedSize(false)
+
+	state := newAppState(a, w)
+	state.showStep(stepSetup)
+
+	w.ShowAndRun()
+}
+
+func runCLI(outputPath string, listenSec int, allReports bool) {
+	listenDur := time.Duration(listenSec) * time.Second
 
 	if err := streamdeck.Init(); err != nil {
 		fatalf("HID init failed: %v\n", err)
@@ -62,16 +82,16 @@ func main() {
 		fmt.Printf("[%d/%d] Probing %s (PID 0x%04X) @ %s\n",
 			i+1, len(rawDevices), raw.ProductStr, raw.ProductID, raw.Path)
 
-		result := ProbeDevice(raw, listenDur, *allReports)
+		result := ProbeDevice(raw, listenDur, allReports)
 		PrintReport(result)
 		results = append(results, result)
 	}
 
-	if *outputPath != "" {
-		if err := writeJSON(*outputPath, results); err != nil {
+	if outputPath != "" {
+		if err := writeJSON(outputPath, results); err != nil {
 			fmt.Fprintf(os.Stderr, "WARNING: could not write JSON: %v\n", err)
 		} else {
-			fmt.Printf("\nJSON report written to: %s\n", *outputPath)
+			fmt.Printf("\nJSON report written to: %s\n", outputPath)
 		}
 	}
 }
