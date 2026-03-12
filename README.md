@@ -26,6 +26,13 @@ go run ./cmd/riverdeck
 
 Or build and run:
 
+> ⚠️ **Before running `go build` or `go run` for the first time**, you must run `mage build` at least once to generate the icon file resources (e.g. `resources/icons/icon_64.png`). These files are embedded at compile time via `//go:embed` and the build will fail if they are missing.
+>
+> ```bash
+> go install github.com/magefile/mage@latest
+> mage build
+> ```
+
 ```bash
 go build ./cmd/riverdeck
 ./riverdeck
