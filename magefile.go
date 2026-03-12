@@ -200,6 +200,11 @@ func Build() error {
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 
+	// Always generate icon PNGs first -- resources/embed.go embeds icon_64.png.
+	if err := Icons(); err != nil {
+		return fmt.Errorf("icons: %w", err)
+	}
+
 	if goos == "windows" {
 		if err := WinResAll(); err != nil {
 			return fmt.Errorf("winres: %w", err)
