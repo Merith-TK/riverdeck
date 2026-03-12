@@ -1,0 +1,47 @@
+{
+	"id": "riverdeck",
+	"name": "Riverdeck Defaults",
+	"version": "1.0.0",
+	"description": "Built-in navigation and utility button templates for Riverdeck.",
+	"order_index": 1,
+	"provides": {
+		"templates": [
+			{
+				"id": "home",
+				"label": "SET/HOME",
+				"icon": "icons/home.svg",
+				"script": "templates/home.lua",
+				"description": "Designated SET/HOME key. Required on every layout page."
+			},
+			{
+				"id": "back",
+				"label": "Back",
+				"icon": "icons/back.svg",
+				"script": "templates/back.lua",
+				"description": "Navigates back one page in the navigation stack."
+			},
+			{
+				"id": "settings",
+				"label": "Settings",
+				"icon": "icons/settings.svg",
+				"script": "templates/settings.lua",
+				"description": "Opens the Riverdeck settings overlay."
+			},
+			{
+				"id": "page_link",
+				"label": "Go to Page",
+				"icon": "icons/folder.svg",
+				"script": "templates/page_link.lua",
+				"description": "Navigates to a named page.",
+				"metadata_schema": [
+					{
+						"key": "target",
+						"label": "Target Page Name",
+						"type": "text",
+						"description": "The name of the page to navigate to."
+					}
+				]
+			}
+		]
+	}
+}

@@ -150,30 +150,72 @@ func WinRes() error {
 	return runInDir("cmd/riverdeck", "go-winres", "make", "--arch", "amd64,386")
 }
 
-// Build compiles all binaries for the current OS/arch into dist/<goos>_<goarch>/.
-// On Windows it also regenerates the exe icon/manifest (.syso) first.
+// WailsBuild compiles the Wails editor (cmd/riverdeck-wails) using the Wails
+// CLI.  The Wails CLI requires wails.json in the working directory, so the
+// command is executed inside cmd/riverdeck-wails.
 //
-// Because Fyne requires CGO, cross-compilation is not supported here; each
-// platform's CI runner builds its own native target.
+// Requires: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+func WailsBuild() error {
+	fmt.Println(">>> building riverdeck-wails via Wails CLI...")
+	return runInDir("cmd/riverdeck-wails", "wails", "build")
+}
+
+// WinResAll generates Windows resource files (.syso) for all binaries that
+// have a winres/ directory.  This embeds the icon and manifest into the exe.
+//
+// Requires: go install github.com/tc-hib/go-winres@latest
+func WinResAll() error {
+	if err := Icons(); err != nil {
+		return err
+	}
+	dirs := []string{
+		"cmd/riverdeck",
+		"cmd/riverdeck-wails",
+	}
+	for _, dir := range dirs {
+		winresDir := filepath.Join(dir, "winres")
+		if _, err := os.Stat(winresDir); os.IsNotExist(err) {
+			continue
+		}
+		fmt.Printf(">>> generating .syso for %s...\n", dir)
+		if err := runInDir(dir, "go-winres", "make", "--arch", "amd64,386"); err != nil {
+			return fmt.Errorf("winres %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+// Build compiles all binaries for the current OS/arch into dist/<goos>_<goarch>/.
+// On Windows it also regenerates exe icons/manifests (.syso) first.
+//
+// Standard binaries are built with -trimpath.  Wails GUI binaries are
+// additionally built with -tags desktop,production and -ldflags "-w -s -H
+// windowsgui" so the console window is hidden on Windows.
 //
 // Output layout (example):
 //
-//	dist/windows_amd64/  - riverdeck.exe, riverdeck-debug-prober.exe, riverdeck-simulator.exe
-//	dist/linux_amd64/    - riverdeck,     riverdeck-debug-prober,     riverdeck-simulator
+//	dist/windows_amd64/  - riverdeck.exe, riverdeck-debug-prober.exe, riverdeck-wails.exe, ...
+//	dist/linux_amd64/    - riverdeck,     riverdeck-debug-prober,     riverdeck-wails, ...
 func Build() error {
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 
 	if goos == "windows" {
-		if err := WinRes(); err != nil {
+		if err := WinResAll(); err != nil {
 			return fmt.Errorf("winres: %w", err)
 		}
 	}
 
-	binaries := []string{
+	// Standard (CLI / headless) binaries.
+	standardBinaries := []string{
 		"./cmd/riverdeck",
 		"./cmd/riverdeck-debug-prober",
 		"./cmd/riverdeck-simulator",
+	}
+
+	// Wails GUI binaries - need production tags and windowsgui ldflags.
+	wailsBinaries := []string{
+		"./cmd/riverdeck-wails",
 	}
 
 	outDir := filepath.Join("dist", goos+"_"+goarch)
@@ -181,7 +223,8 @@ func Build() error {
 		return err
 	}
 
-	for _, pkg := range binaries {
+	// Build standard binaries.
+	for _, pkg := range standardBinaries {
 		name := filepath.Base(pkg)
 		outFile := filepath.Join(outDir, name)
 		if goos == "windows" {
@@ -195,6 +238,33 @@ func Build() error {
 			return fmt.Errorf("build %s: %w", pkg, err)
 		}
 	}
+
+	// Build Wails GUI binaries with production flags.
+	for _, pkg := range wailsBinaries {
+		name := filepath.Base(pkg)
+		outFile := filepath.Join(outDir, name)
+		if goos == "windows" {
+			outFile += ".exe"
+		}
+		fmt.Printf(">>> building (wails) %s/%s -> %s\n", goos, goarch, outFile)
+		ldflags := "-w -s"
+		if goos == "windows" {
+			ldflags += " -H windowsgui"
+		}
+		cmd := exec.Command("go", "build",
+			"-tags", "desktop,production",
+			"-trimpath",
+			"-ldflags", ldflags,
+			"-o", outFile,
+			pkg,
+		)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("build %s: %w", pkg, err)
+		}
+	}
+
 	fmt.Println(">>> build complete. artifacts in", outDir)
 	return nil
 }

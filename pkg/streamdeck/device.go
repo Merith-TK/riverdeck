@@ -99,6 +99,8 @@ func OpenWithConfig(path string, jpegQuality int) (*Device, error) {
 }
 
 // OpenFirst opens the first Stream Deck device found.
+// NOTE: currently unused by the application (which uses Enumerate + OpenWithConfig).
+// Retained as a convenience for external consumers and testing.
 func OpenFirst() (*Device, error) {
 	devices, err := Enumerate()
 	if err != nil {
@@ -208,28 +210,75 @@ func (d *Device) prepareImage(src image.Image) image.Image {
 
 	// Create destination image
 	dst := image.NewRGBA(image.Rect(0, 0, size, size))
+	stride := dst.Stride
 
-	// If source is correct size, just copy with rotation
-	if bounds.Dx() == size && bounds.Dy() == size {
-		// Rotate 180 degrees
+	// Fast path: read directly from Pix when source is *image.RGBA.
+	if srcRGBA, ok := src.(*image.RGBA); ok {
+		ss := srcRGBA.Stride
+		sp := srcRGBA.Pix
+		dp := dst.Pix
+		bx, by := bounds.Min.X, bounds.Min.Y
+
+		if bounds.Dx() == size && bounds.Dy() == size {
+			// Same size: copy with 180° rotation using direct pixel access.
+			for y := 0; y < size; y++ {
+				for x := 0; x < size; x++ {
+					si := (by+y)*ss + (bx+x)*4
+					di := (size-1-y)*stride + (size-1-x)*4
+					dp[di+0] = sp[si+0]
+					dp[di+1] = sp[si+1]
+					dp[di+2] = sp[si+2]
+					dp[di+3] = sp[si+3]
+				}
+			}
+			return dst
+		}
+
+		// Scale + rotate using direct pixel access.
+		scaleX := float64(bounds.Dx()) / float64(size)
+		scaleY := float64(bounds.Dy()) / float64(size)
 		for y := 0; y < size; y++ {
 			for x := 0; x < size; x++ {
-				dst.Set(size-1-x, size-1-y, src.At(bounds.Min.X+x, bounds.Min.Y+y))
+				srcX := int(float64(size-1-x) * scaleX)
+				srcY := int(float64(size-1-y) * scaleY)
+				si := (by+srcY)*ss + (bx+srcX)*4
+				di := y*stride + x*4
+				dp[di+0] = sp[si+0]
+				dp[di+1] = sp[si+1]
+				dp[di+2] = sp[si+2]
+				dp[di+3] = sp[si+3]
 			}
 		}
 		return dst
 	}
 
-	// Scale the image to fit
+	// Fallback: generic path via image.Image interface.
+	if bounds.Dx() == size && bounds.Dy() == size {
+		for y := 0; y < size; y++ {
+			for x := 0; x < size; x++ {
+				r, g, b, a := src.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
+				di := (size-1-y)*stride + (size-1-x)*4
+				dst.Pix[di+0] = uint8(r >> 8)
+				dst.Pix[di+1] = uint8(g >> 8)
+				dst.Pix[di+2] = uint8(b >> 8)
+				dst.Pix[di+3] = uint8(a >> 8)
+			}
+		}
+		return dst
+	}
+
 	scaleX := float64(bounds.Dx()) / float64(size)
 	scaleY := float64(bounds.Dy()) / float64(size)
-
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
-			// Sample from source with rotation (180 degrees)
 			srcX := int(float64(size-1-x) * scaleX)
 			srcY := int(float64(size-1-y) * scaleY)
-			dst.Set(x, y, src.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))
+			r, g, b, a := src.At(bounds.Min.X+srcX, bounds.Min.Y+srcY).RGBA()
+			di := y*stride + x*4
+			dst.Pix[di+0] = uint8(r >> 8)
+			dst.Pix[di+1] = uint8(g >> 8)
+			dst.Pix[di+2] = uint8(b >> 8)
+			dst.Pix[di+3] = uint8(a >> 8)
 		}
 	}
 
@@ -239,6 +288,7 @@ func (d *Device) prepareImage(src image.Image) image.Image {
 // encodeImage encodes the image to the appropriate format for this device.
 func (d *Device) encodeImage(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
+	buf.Grow(8192) // pre-allocate; typical key images encode to 2-10 KB
 
 	switch d.Model.ImageFormat {
 	case "JPEG":
@@ -280,6 +330,9 @@ func (d *Device) writeImageData(keyIndex int, imageData []byte) error {
 
 	totalPages := (len(imageData) + payloadSize - 1) / payloadSize
 
+	// Allocate the report buffer once and reuse across pages.
+	report := make([]byte, pageSize)
+
 	for page := 0; page < totalPages; page++ {
 		start := page * payloadSize
 		end := start + payloadSize
@@ -290,8 +343,10 @@ func (d *Device) writeImageData(keyIndex int, imageData []byte) error {
 
 		isLastPage := page == totalPages-1
 
-		// Build the report
-		report := make([]byte, pageSize)
+		// Zero the report (trailing bytes must be 0 for short pages).
+		clear(report)
+
+		// Build the header.
 		report[0] = 0x02           // Report ID for image
 		report[1] = 0x07           // Command
 		report[2] = byte(keyIndex) // Key index
@@ -322,8 +377,15 @@ func (d *Device) Clear() error {
 		return nil // No display to clear
 	}
 	black := image.NewRGBA(image.Rect(0, 0, d.Model.PixelSize, d.Model.PixelSize))
+	prepared := d.prepareImage(black)
+	data, err := d.encodeImage(prepared)
+	if err != nil {
+		return fmt.Errorf("encode black image: %w", err)
+	}
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 	for i := 0; i < d.Model.Keys; i++ {
-		if err := d.SetImage(i, black); err != nil {
+		if err := d.writeImageData(i, data); err != nil {
 			return fmt.Errorf("clear key %d: %w", i, err)
 		}
 	}

@@ -1,0 +1,9 @@
+{
+	"$schema": "https://wails.io/schemas/config.v2.json",
+	"name": "riverdeck-wails",
+	"outputfilename": "riverdeck-wails",
+	"author": {
+		"name": "Merith",
+		"email": "merith@merith.xyz"
+	}
+}

@@ -1,3 +1,8 @@
+// Package prober provides low-level HID probing and enumeration for Elgato
+// Stream Deck devices.  It sends raw USB feature/interrupt reports to discover
+// firmware versions, serial numbers, key counts, and display parameters.
+// The results are collected into a structured DeviceInfo that higher-level
+// packages (e.g. streamdeck) use for device initialisation.
 package prober
 
 import (

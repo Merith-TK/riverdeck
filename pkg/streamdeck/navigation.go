@@ -9,10 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/math/fixed"
 )
 
 // PageItem represents an item on a page (folder or action).
@@ -76,8 +72,8 @@ func (n *Navigator) calculateKeyLayout() {
 	cols := n.dev.Cols()
 	rows := n.dev.Rows()
 
-	n.contentKeys = nil
-	n.reservedKeys = nil
+	n.contentKeys = make([]int, 0, rows*(cols-1))
+	n.reservedKeys = make([]int, 0, rows)
 
 	for row := 0; row < rows; row++ {
 		for col := 0; col < cols; col++ {
@@ -176,7 +172,7 @@ func (n *Navigator) LoadPage() (*Page, error) {
 	}
 
 	// Filter and sort entries
-	var items []PageItem
+	items := make([]PageItem, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
 
@@ -441,46 +437,6 @@ func (n *Navigator) RenderPage() error {
 	return nil
 }
 
-// renderReservedKeys renders the reserved column buttons (column 0).
-// NOTE: this is a convenience helper for one-off refreshes; RenderPage already
-// contains the same logic for full-page redraws.
-func (n *Navigator) renderReservedKeys() {
-	totalKeys := n.dev.Keys()
-
-	// Determine current page state so we can show pagination arrows.
-	var pageIdx, totalPages int
-	if p, err := n.LoadPage(); err == nil {
-		pageIdx = p.PageIndex
-		totalPages = p.TotalPages
-	}
-
-	// Back key: PG^ when past page 0; otherwise Back/<- or SET at root.
-	if pageIdx > 0 {
-		img := n.CreateTextImageWithColors("PG^", color.RGBA{60, 60, 60, 255}, color.White)
-		n.dev.SetImage(n.BackKey(), img)
-	} else if !n.IsAtRoot() {
-		img := n.createTextImage("<-", color.RGBA{100, 100, 100, 255})
-		n.dev.SetImage(n.BackKey(), img)
-	} else {
-		img := n.CreateTextImageWithColors("SET", color.RGBA{120, 80, 0, 255}, color.RGBA{255, 200, 50, 255})
-		n.dev.SetImage(n.BackKey(), img)
-	}
-
-	// T1: PGv when more pages ahead; otherwise dim T1 script slot.
-	if t1 := n.Toggle1Key(); t1 < totalKeys {
-		if pageIdx < totalPages-1 {
-			img := n.CreateTextImageWithColors("PGv", color.RGBA{60, 60, 60, 255}, color.White)
-			n.dev.SetImage(t1, img)
-		} else {
-			n.dev.SetImage(t1, n.createTextImage("T1", color.RGBA{30, 30, 30, 255}))
-		}
-	}
-	// T2 is always free for scripts.
-	if t2 := n.Toggle2Key(); t2 < totalKeys {
-		n.dev.SetImage(t2, n.createTextImage("T2", color.RGBA{30, 30, 30, 255}))
-	}
-}
-
 // HandleKeyPress handles a key press and returns the action to take.
 // Returns: (item *PageItem, navigated bool, err error)
 // If navigated is true, the page changed. If item is non-nil, it's an action to execute.
@@ -532,12 +488,12 @@ func (n *Navigator) HandleKeyPress(keyIndex int) (*PageItem, bool, error) {
 // GetVisibleScripts returns a map of script paths to key indices for visible scripts.
 // Includes both action scripts and folder .directory.lua passive scripts.
 func (n *Navigator) GetVisibleScripts() map[string]int {
-	result := make(map[string]int)
-
 	page, err := n.LoadPage()
 	if err != nil {
-		return result
+		return make(map[string]int)
 	}
+
+	result := make(map[string]int, len(page.Items))
 
 	for i, item := range page.Items {
 		if i >= len(n.contentKeys) {
@@ -559,57 +515,14 @@ func (n *Navigator) createTextImage(text string, bgColor color.Color) image.Imag
 // CreateTextImageWithColors creates an image with text and custom colors.
 // This is exported for use by script passive updates.
 func (n *Navigator) CreateTextImageWithColors(text string, bgColor, textColor color.Color) image.Image {
-	size := n.dev.PixelSize()
-	img := image.NewRGBA(image.Rect(0, 0, size, size))
-
-	// Fill background
-	draw.Draw(img, img.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
-
-	// Draw text centered
-	d := &font.Drawer{
-		Dst:  img,
-		Src:  image.NewUniform(textColor),
-		Face: basicfont.Face7x13,
-	}
-
-	// Calculate text position (roughly centered)
-	textWidth := len(text) * 7 // basicfont is ~7px wide per char
-	x := (size - textWidth) / 2
-	if x < 2 {
-		x = 2
-	}
-	y := size/2 + 4 // Center vertically
-
-	d.Dot = fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
-	d.DrawString(text)
-
-	return img
+	return createTextImageWithColors(n.dev.PixelSize(), text, bgColor, textColor)
 }
 
 // RenderTextOnImage draws centred text over an already-rendered image without
 // replacing the background. The caller is responsible for passing an image
 // that has already been resized to the device's pixel size.
 func (n *Navigator) RenderTextOnImage(base image.Image, text string, textColor color.Color) image.Image {
-	size := n.dev.PixelSize()
-	result := image.NewRGBA(image.Rect(0, 0, size, size))
-	draw.Draw(result, result.Bounds(), base, image.Point{}, draw.Src)
-
-	d := &font.Drawer{
-		Dst:  result,
-		Src:  image.NewUniform(textColor),
-		Face: basicfont.Face7x13,
-	}
-
-	textWidth := len(text) * 7 // basicfont is ~7px wide per char
-	x := (size - textWidth) / 2
-	if x < 2 {
-		x = 2
-	}
-	y := size/2 + 4 // Centre vertically
-
-	d.Dot = fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
-	d.DrawString(text)
-	return result
+	return renderTextOnImage(n.dev.PixelSize(), base, text, textColor)
 }
 
 // truncateName truncates a name to fit on a button.

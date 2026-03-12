@@ -34,10 +34,9 @@ import (
 	"fmt"
 	"image/color"
 	"log"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"time"
+
+	"github.com/merith-tk/riverdeck/pkg/platform"
 )
 
 // timeoutValues is the ordered list of selectable timeout durations (seconds).
@@ -50,6 +49,7 @@ var timeoutValues = []int{0, 30, 60, 120, 300}
 // disabled/hidden on the current device.
 type settingsLayout struct {
 	exit    int
+	edit    int
 	reload  int
 	openDir int
 	brtDown int
@@ -58,6 +58,34 @@ type settingsLayout struct {
 	tmoDown int
 	tmoVal  int
 	tmoUp   int
+}
+
+// ── Settings key helpers ─────────────────────────────────────────────────────
+// These derive physical key positions directly from device geometry so that the
+// settings overlay is independent of which navigator mode is active.  The
+// convention mirrors the folder-mode Navigator: col 0 is always reserved for
+// navigation meta-keys.
+
+// settingsBackKey returns physical key 0 (col 0, row 0).
+func (a *App) settingsBackKey() int { return 0 }
+
+// settingsScrollUpKey returns the col-0 key on row 1.
+func (a *App) settingsScrollUpKey() int { return a.device.Cols() }
+
+// settingsScrollDownKey returns the col-0 key on row 2 (or out-of-range on 2-row devices).
+func (a *App) settingsScrollDownKey() int { return a.device.Cols() * 2 }
+
+// settingsContentKeys returns all non-col-0 keys in row-major order.
+func (a *App) settingsContentKeys() []int {
+	cols := a.device.Cols()
+	rows := a.device.Rows()
+	keys := make([]int, 0, (cols-1)*rows)
+	for row := 0; row < rows; row++ {
+		for col := 1; col < cols; col++ {
+			keys = append(keys, row*cols+col)
+		}
+	}
+	return keys
 }
 
 // settingsPageCount returns the total number of settings pages for this device.
@@ -85,12 +113,14 @@ func (a *App) settingsPageCount() int {
 //
 // Slot -1 means the button is disabled/hidden on this device.
 func (a *App) calcSettingsLayout() settingsLayout {
-	cc := a.device.Cols() - 1 // content columns per row
+	rows := a.device.Rows()
+	page := a.settingsPage
+
+	// Settings always treats col-0 as reserved; content columns = Cols-1.
+	cc := a.device.Cols() - 1
 	if cc < 1 {
 		cc = 1
 	}
-	rows := a.device.Rows()
-	page := a.settingsPage
 
 	// Row starting offsets into contentKeys
 	row0 := 0
@@ -99,15 +129,18 @@ func (a *App) calcSettingsLayout() settingsLayout {
 
 	// Start with everything disabled
 	sl := settingsLayout{
-		exit:   row0 + 0,
-		reload: -1, openDir: -1,
+		exit: row0 + 0,
+		edit: -1, reload: -1, openDir: -1,
 		brtDown: -1, brtVal: -1, brtUp: -1,
 		tmoDown: -1, tmoVal: -1, tmoUp: -1,
 	}
 
-	// System row: RELOAD and CFGDIR positions depend on available width
+	// System row: EDIT, RELOAD, and CFGDIR positions depend on available width.
+	// Slot 0 of row0 is always EXIT.
+	// Slot 1 (row0+1) is EDIT when cc >= 4 (5+ col devices).
 	switch {
 	case cc >= 4:
+		sl.edit = row0 + 1
 		sl.reload = row0 + 2
 		sl.openDir = row0 + cc - 1 // far right
 	case cc == 3:
@@ -169,41 +202,45 @@ func (a *App) exitSettings() {
 // width (Mini, MK.2/Original, XL, etc.).
 func (a *App) renderSettingsPage() {
 	sl := a.calcSettingsLayout()
-	contentKeys := a.nav.GetContentKeys()
+	contentKeys := a.settingsContentKeys()
 
-	// Black-out all keys first via the device's clear helper, then paint ours.
+	// Black-out all keys first, then paint ours.
 	totalKeys := a.device.Keys()
 	for i := 0; i < totalKeys; i++ {
 		a.device.SetKeyColor(i, color.RGBA{0, 0, 0, 255})
 	}
 
-	// Reserved col-0 key.
-	// Mirrors normal navigation: PG^ when on a page past the first, otherwise <-.
+	// Col-0, row 0: Back / exit settings.
 	if a.settingsPage > 0 {
 		backImg := a.nav.CreateTextImageWithColors("PG^", color.RGBA{60, 60, 60, 255}, color.White)
-		a.device.SetImage(a.nav.BackKey(), backImg)
+		a.device.SetImage(a.settingsBackKey(), backImg)
 	} else {
 		backImg := a.nav.CreateTextImageWithColors("<-", color.RGBA{100, 100, 100, 255}, color.White)
-		a.device.SetImage(a.nav.BackKey(), backImg)
+		a.device.SetImage(a.settingsBackKey(), backImg)
 	}
 
-	// T1: PGv when more settings pages exist ahead; dim otherwise.
-	// T2: always dim/free -- never consumed by settings pagination.
+	// Col-0, row 1: scroll up = go to previous page.
 	totalPages := a.settingsPageCount()
-	t1Key := a.nav.Toggle1Key()
-	t2Key := a.nav.Toggle2Key()
+	t1Key := a.settingsScrollUpKey()
+	t2Key := a.settingsScrollDownKey()
 	if t1Key < totalKeys {
-		if a.settingsPage < totalPages-1 {
-			t1Img := a.nav.CreateTextImageWithColors("PGv", color.RGBA{60, 60, 60, 255}, color.White)
+		if a.settingsPage > 0 {
+			t1Img := a.nav.CreateTextImageWithColors("PG^", color.RGBA{60, 60, 60, 255}, color.White)
 			a.device.SetImage(t1Key, t1Img)
 		} else {
-			t1Img := a.nav.CreateTextImageWithColors("T1", color.RGBA{30, 30, 30, 255}, color.RGBA{80, 80, 80, 255})
+			t1Img := a.nav.CreateTextImageWithColors("---", color.RGBA{20, 20, 20, 255}, color.RGBA{60, 60, 60, 255})
 			a.device.SetImage(t1Key, t1Img)
 		}
 	}
+	// Col-0, row 2: scroll down = go to next page.
 	if t2Key < totalKeys {
-		t2Img := a.nav.CreateTextImageWithColors("T2", color.RGBA{30, 30, 30, 255}, color.RGBA{80, 80, 80, 255})
-		a.device.SetImage(t2Key, t2Img)
+		if a.settingsPage < totalPages-1 {
+			t2Img := a.nav.CreateTextImageWithColors("PGv", color.RGBA{60, 60, 60, 255}, color.White)
+			a.device.SetImage(t2Key, t2Img)
+		} else {
+			t2Img := a.nav.CreateTextImageWithColors("---", color.RGBA{20, 20, 20, 255}, color.RGBA{60, 60, 60, 255})
+			a.device.SetImage(t2Key, t2Img)
+		}
 	}
 
 	// Helper to set a content key by slot index.
@@ -222,6 +259,7 @@ func (a *App) renderSettingsPage() {
 	} else {
 		setSlot(sl.exit, "EXIT", color.RGBA{140, 20, 20, 255}, color.RGBA{255, 180, 180, 255})
 	}
+	setSlot(sl.edit, "EDIT", color.RGBA{60, 20, 100, 255}, color.RGBA{200, 150, 255, 255})
 	setSlot(sl.reload, "RELOAD", color.RGBA{20, 100, 20, 255}, color.RGBA{160, 255, 160, 255})
 	setSlot(sl.openDir, "CFGDIR", color.RGBA{20, 80, 80, 255}, color.RGBA{160, 230, 230, 255})
 
@@ -243,8 +281,8 @@ func (a *App) renderSettingsPage() {
 func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 	totalPages := a.settingsPageCount()
 
-	// Back key: go to previous settings page when past page 0; exit settings on page 0.
-	if keyIndex == a.nav.BackKey() {
+	// Col-0, row 0: Back / exit settings.
+	if keyIndex == a.settingsBackKey() {
 		if a.settingsPage > 0 {
 			a.settingsPage--
 			a.renderSettingsPage()
@@ -254,8 +292,17 @@ func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 		return nil
 	}
 
-	// T1: advance to next settings page when more exist; inert otherwise.
-	if keyIndex == a.nav.Toggle1Key() {
+	// Col-0, row 1: scroll up = go to previous page.
+	if keyIndex == a.settingsScrollUpKey() {
+		if a.settingsPage > 0 {
+			a.settingsPage--
+			a.renderSettingsPage()
+		}
+		return nil
+	}
+
+	// Col-0, row 2: scroll down = go to next page.
+	if t2Key := a.settingsScrollDownKey(); t2Key < a.device.Keys() && keyIndex == t2Key {
 		if a.settingsPage < totalPages-1 {
 			a.settingsPage++
 			a.renderSettingsPage()
@@ -263,12 +310,7 @@ func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 		return nil
 	}
 
-	// T2: never used for settings pagination -- ignore.
-	if t2Key := a.nav.Toggle2Key(); t2Key < a.device.Keys() && keyIndex == t2Key {
-		return nil
-	}
-
-	contentKeys := a.nav.GetContentKeys()
+	contentKeys := a.settingsContentKeys()
 	sl := a.calcSettingsLayout()
 
 	// Map the physical key index to a slot index
@@ -333,9 +375,13 @@ func (a *App) handleSettingsKeyEvent(keyIndex int) error {
 		return nil
 	case sl.openDir:
 		log.Printf("[*] Opening config directory: %s", a.configPath)
-		if err := openConfigDir(a.configPath); err != nil {
+		if err := platform.OpenFolder(a.configPath); err != nil {
 			log.Printf("openConfigDir: %v", err)
 		}
+		return nil
+	case sl.edit:
+		log.Println("[*] Opening layout editor")
+		a.OpenEditor()
 		return nil
 	case sl.brtDown:
 		a.adjustBrightness(-5)
@@ -407,19 +453,4 @@ func fmtTimeout(seconds int) string {
 		return fmt.Sprintf("T:%ds", seconds)
 	}
 	return fmt.Sprintf("T:%dm", seconds/60)
-}
-
-// openConfigDir opens the given directory in the system's default file manager
-// (Explorer on Windows, Finder/open on macOS, xdg-open on Linux).
-func openConfigDir(dir string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("explorer", filepath.ToSlash(dir))
-	case "darwin":
-		cmd = exec.Command("open", dir)
-	default:
-		cmd = exec.Command("xdg-open", dir)
-	}
-	return cmd.Start()
 }

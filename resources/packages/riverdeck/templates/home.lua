@@ -1,0 +1,7 @@
+-- riverdeck/templates/home.lua
+-- SET/HOME key: navigates to the root page when pressed.
+-- This script is a placeholder; the "home" action is handled natively
+-- by the LayoutNavigator. Assign action="home" to this button in your layout.
+--
+-- This file is intentionally minimal as the navigation is handled by the
+-- Riverdeck engine itself when action="home" is set.

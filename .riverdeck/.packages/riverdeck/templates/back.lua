@@ -1,0 +1,6 @@
+-- riverdeck/templates/back.lua
+-- Back key: navigates one step back in the navigation stack.
+-- Assign action="back" to this button in your layout.
+--
+-- This file is intentionally minimal as the navigation is handled by the
+-- Riverdeck engine itself when action="back" is set.

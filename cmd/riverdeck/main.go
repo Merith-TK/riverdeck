@@ -7,9 +7,8 @@ import (
 	"os/exec"
 	"sync"
 
-	"fyne.io/fyne/v2"
-	fyneapp "fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/driver/desktop"
+	"github.com/getlantern/systray"
+	"github.com/merith-tk/riverdeck/resources"
 )
 
 var configDir = flag.String("configdir", "", "Configuration directory path")
@@ -19,14 +18,9 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	flag.Parse()
 
-	// Create the Fyne application. This must happen on the main thread.
-	// It owns the OS event loop and drives the systray icon.
-	a := fyneapp.NewWithID("io.github.merith-tk.riverdeck")
-	a.SetIcon(resourceIconSvg)
-
 	// Track the currently running riverdeck App so the systray menu can
-	// cancel it. Protected by a mutex because the goroutine writes it and
-	// the Fyne event loop reads it.
+	// cancel it.  Protected by a mutex because the goroutine writes it and
+	// the systray callbacks read it.
 	var (
 		activeMu  sync.Mutex
 		activeApp *App
@@ -45,25 +39,9 @@ func main() {
 		}
 	}
 
-	// Systray menu: a single "Quit Riverdeck" item.
-	// Cancelling the active app's context causes Run() to return, at which
-	// point the goroutine below will call fyneApp.Quit() and the process exits.
-	menu := fyne.NewMenu("Riverdeck",
-		fyne.NewMenuItem("Quit Riverdeck", func() {
-			cancelActive()
-			// fyneApp.Quit() is called by the goroutine once Run() returns,
-			// so we don't need to call it here.
-		}),
-	)
-	// SetSystemTrayIcon / SetSystemTrayMenu live on the desktop.App interface.
-	if desk, ok := a.(desktop.App); ok {
-		desk.SetSystemTrayIcon(resourceIconSvg)
-		desk.SetSystemTrayMenu(menu)
-	}
-
 	// Run the riverdeck event loop in a background goroutine. When it exits
-	// permanently (no restart requested) we call fyneApp.Quit() so the process
-	// terminates cleanly.
+	// permanently (no restart requested) we call systray.Quit() so the
+	// process terminates cleanly.
 	go func() {
 		for {
 			rd := NewApp()
@@ -81,13 +59,11 @@ func main() {
 			rd.Shutdown()
 
 			if !rd.restartRequested {
-				a.Quit()
+				systray.Quit()
 				return
 			}
 
 			// Relaunch: re-exec the current binary with the same arguments.
-			// Shutdown() above already closed the HID device so the new process
-			// can claim it cleanly.
 			exe, err := os.Executable()
 			if err != nil {
 				log.Printf("Restart: could not resolve executable: %v - falling back to in-process restart", err)
@@ -102,11 +78,38 @@ func main() {
 				continue
 			}
 			// The new process is running; exit this one.
-			a.Quit()
+			systray.Quit()
 			os.Exit(0)
 		}
 	}()
 
-	// Block the main thread running the Fyne/OS event loop (systray lives here).
-	a.Run()
+	// Block the main thread running the systray event loop.
+	systray.Run(func() {
+		// onReady: set up the tray icon and menu.
+		systray.SetIcon(resources.IconPNG)
+		systray.SetTitle("Riverdeck")
+		systray.SetTooltip("Riverdeck - Stream Deck Controller")
+
+		mEditor := systray.AddMenuItem("Open Editor", "Launch the layout editor")
+		systray.AddSeparator()
+		mQuit := systray.AddMenuItem("Quit Riverdeck", "Stop Riverdeck and exit")
+
+		go func() {
+			for {
+				select {
+				case <-mEditor.ClickedCh:
+					activeMu.Lock()
+					rd := activeApp
+					activeMu.Unlock()
+					if rd != nil {
+						rd.OpenEditor()
+					}
+				case <-mQuit.ClickedCh:
+					cancelActive()
+				}
+			}
+		}()
+	}, func() {
+		// onExit: nothing to clean up.
+	})
 }

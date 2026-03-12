@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"runtime"
 	"time"
+
+	"github.com/merith-tk/riverdeck/pkg/platform"
 )
 
 func main() {
@@ -79,7 +79,7 @@ func main() {
 	log.Printf("Connect riverdeck with: riverdeck --sim %s:%d", *httpAddr, *tcpPort)
 
 	if !*noOpen {
-		openBrowser(browserURL)
+		platform.OpenBrowser(browserURL)
 	}
 
 	// Block forever -- servers run in goroutines.
@@ -112,21 +112,4 @@ func loadProbeSpec(path string, index int) (SimSpec, error) {
 		return SimSpec{}, fmt.Errorf("parse JSON: %w", err)
 	}
 	return single, nil
-}
-
-// openBrowser launches the system default browser at url.
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default: // linux, freebsd, etc.
-		cmd = exec.Command("xdg-open", url)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Printf("could not open browser automatically: %v", err)
-		log.Printf("please open %s manually", url)
-	}
 }

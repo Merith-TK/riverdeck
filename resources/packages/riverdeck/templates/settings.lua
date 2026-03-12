@@ -1,0 +1,6 @@
+-- riverdeck/templates/settings.lua
+-- Settings key: opens the Riverdeck settings overlay.
+-- Assign action="settings" to this button in your layout.
+--
+-- This file is intentionally minimal as the settings overlay is handled by
+-- the Riverdeck engine itself when action="settings" is set.
