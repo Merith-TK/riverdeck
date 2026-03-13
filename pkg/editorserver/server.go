@@ -105,5 +105,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/app-config", s.handleAppConfig)
 	mux.HandleFunc("/api/lua/new", s.handleLuaNew)
 	mux.HandleFunc("/api/lua/templates", s.handleLuaTemplates)
+	mux.HandleFunc("/api/custom-template", s.handleCustomTemplate)
+	mux.HandleFunc("/api/custom-template/file", s.handleCustomTemplateFile)
 	mux.HandleFunc("/api/monaco/", s.handleMonaco)
 }
