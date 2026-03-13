@@ -156,7 +156,7 @@ func yamlSetKey(mapping *yaml.Node, key string, val interface{}) {
 			return
 		}
 	}
-	// Key not found — append.
+	// Key not found -- append.
 	mapping.Content = append(mapping.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
 		newValNode,

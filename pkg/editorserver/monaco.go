@@ -20,7 +20,7 @@ const monacoCDN = "https://cdn.jsdelivr.net/npm/monaco-editor@" + monacoVersion 
 // back to the CDN on the first request for each file.  Subsequent requests
 // (including offline) are served entirely from the cache.
 //
-// URL mapping: GET /api/monaco/vs/loader.js  →  <cacheDir>/vs/loader.js
+// URL mapping: GET /api/monaco/vs/loader.js  ->  <cacheDir>/vs/loader.js
 //
 // Only .js, .css, .svg, .ttf, .woff, .woff2, and .map file extensions are allowed.
 func (s *Server) handleMonaco(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +55,7 @@ func (s *Server) handleMonaco(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Not cached — fetch from CDN.
+	// Not cached -- fetch from CDN.
 	cdnURL := monacoCDN + "/" + rel
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(cdnURL)

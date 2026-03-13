@@ -44,15 +44,15 @@ func (s *Server) ensureCustomPackage() error {
 
 // handleCustomTemplate manages custom layout-mode templates.
 //
-// POST /api/custom-template  — create a new custom template (from scratch or duplicated)
+// POST /api/custom-template  -- create a new custom template (from scratch or duplicated)
 //
 //	Body: {"id":"my_btn","label":"My Button","description":"...","source_script":"" or "pkg://...","lua_content":"..."}
 //	If source_script is set, its content is copied. Otherwise lua_content or a starter is used.
 //	Returns: {"template_key":"pkg://_custom/my_btn"}
 //
-// DELETE /api/custom-template?id=my_btn  — delete a custom template
+// DELETE /api/custom-template?id=my_btn  -- delete a custom template
 //
-// GET /api/custom-template  — list all custom templates
+// GET /api/custom-template  -- list all custom templates
 func (s *Server) handleCustomTemplate(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -91,7 +91,7 @@ func (s *Server) createCustomTemplate(w http.ResponseWriter, r *http.Request) {
 		ID           string `json:"id"`
 		Label        string `json:"label"`
 		Description  string `json:"description"`
-		SourceScript string `json:"source_script"` // pkg://vendor/template_id — copy content from this
+		SourceScript string `json:"source_script"` // pkg://vendor/template_id -- copy content from this
 		LuaContent   string `json:"lua_content"`   // raw Lua for brand-new scripts
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -277,7 +277,7 @@ func (s *Server) saveCustomManifest(m *scripting.PackageManifest) error {
 // handleCustomTemplateFile provides read/write access to a custom template's
 // Lua script for the Monaco editor.
 //
-// GET  /api/custom-template/file?id=my_btn  → Lua source as text/plain
+// GET  /api/custom-template/file?id=my_btn  -> Lua source as text/plain
 // POST /api/custom-template/file?id=my_btn  ← new Lua source in body
 func (s *Server) handleCustomTemplateFile(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
