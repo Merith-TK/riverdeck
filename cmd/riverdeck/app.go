@@ -52,7 +52,7 @@ type App struct {
 	inSettings       bool
 	settingsPage     int  // future: scroll through setting rows
 	exitConfirming   bool // true after first EXIT press, waiting for confirmation
-	restartRequested bool // set by RELOAD; main loop relaunches the process
+	restartRequested bool // set by RELOAD; main loop restarts in-process
 
 	// Display sleep / timeout
 	sleepMu      sync.Mutex

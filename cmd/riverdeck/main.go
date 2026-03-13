@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"os"
-	"os/exec"
 	"sync"
 
 	"github.com/getlantern/systray"
@@ -63,23 +61,8 @@ func main() {
 				return
 			}
 
-			// Relaunch: re-exec the current binary with the same arguments.
-			exe, err := os.Executable()
-			if err != nil {
-				log.Printf("Restart: could not resolve executable: %v - falling back to in-process restart", err)
-				continue
-			}
-			cmd := exec.Command(exe, os.Args[1:]...)
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Start(); err != nil {
-				log.Printf("Restart: exec failed: %v - falling back to in-process restart", err)
-				continue
-			}
-			// The new process is running; exit this one.
-			systray.Quit()
-			os.Exit(0)
+			// In-process restart: loop back to NewApp() above.
+			log.Println("[*] Restarting in-process...")
 		}
 	}()
 
