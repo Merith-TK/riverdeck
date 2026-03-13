@@ -7,13 +7,49 @@
 		"libraries": [
 			"lib/ytm.lua"
 		],
-		"buttons": [
-			"buttons/pair.lua",
-			"buttons/play_pause.lua",
-			"buttons/next.lua",
-			"buttons/prev.lua",
-			"buttons/like.lua",
-			"buttons/shuffle.lua"
+		"templates": [
+			{
+				"id": "pair",
+				"label": "Pair",
+				"script": "templates/pair.lua",
+				"description": "Manage YTM Desktop pairing. Press to initiate or re-initiate pairing."
+			},
+			{
+				"id": "play_pause",
+				"label": "Play/Pause",
+				"script": "templates/play_pause.lua",
+				"description": "Toggle playback in YTM Desktop."
+			},
+			{
+				"id": "next",
+				"label": "Next",
+				"script": "templates/next.lua",
+				"description": "Skip to the next track."
+			},
+			{
+				"id": "prev",
+				"label": "Previous",
+				"script": "templates/prev.lua",
+				"description": "Go back to the previous track."
+			},
+			{
+				"id": "like",
+				"label": "Like",
+				"script": "templates/like.lua",
+				"description": "Toggle like on the current track."
+			},
+			{
+				"id": "shuffle",
+				"label": "Shuffle",
+				"script": "templates/shuffle.lua",
+				"description": "Send a shuffle toggle command."
+			},
+			{
+				"id": "thubnail",
+				"label": "Thumbnail",
+				"script": "templates/thumbnail.lua",
+				"description": "Show the current track's thumbnail.)"
+			}
 		]
 	},
 	"requires": []

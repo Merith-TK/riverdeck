@@ -398,14 +398,22 @@ func (s *Server) handleFolderAssign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the resolved template.
+	// Re-scan packages so we have the latest state from disk.
+	freshPkgs, scanErr := scripting.ScanPackages(s.cfg.ConfigDir)
+	if scanErr != nil {
+		log.Printf("[editorserver] folder/assign: package scan error: %v", scanErr)
+	}
+	s.mu.Lock()
+	s.cfg.Packages = freshPkgs
+	s.mu.Unlock()
+
 	s.mu.RLock()
 	pkgs := s.cfg.Packages
 	s.mu.RUnlock()
 
 	var absSrc string
 	for _, pkg := range pkgs {
-		if pkg.Manifest.ID != req.PkgID {
+		if req.PkgID != "" && pkg.Manifest.ID != req.PkgID {
 			continue
 		}
 		for _, rt := range pkg.ResolvedTemplates {
@@ -413,6 +421,9 @@ func (s *Server) handleFolderAssign(w http.ResponseWriter, r *http.Request) {
 				absSrc = rt.AbsScript
 				break
 			}
+		}
+		if absSrc != "" {
+			break
 		}
 	}
 	if absSrc == "" {

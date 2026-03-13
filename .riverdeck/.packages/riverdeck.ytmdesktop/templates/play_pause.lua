@@ -37,7 +37,7 @@ function M.passive(key, state)
     end
 end
 
-function M.trigger(key, state)
+function M.trigger(state)
     if not ytm.connected() then return end
     ytm.play_pause()
 end

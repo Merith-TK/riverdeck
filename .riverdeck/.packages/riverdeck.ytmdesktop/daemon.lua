@@ -36,7 +36,7 @@ local BASE_URL      = "http://127.0.0.1:9863/api/v1"
 local APP_ID        = "riverdeckstreamdeck"
 local APP_NAME      = "Riverdeck Stream Deck"
 local APP_VER       = "1.0.0"
-local POLL_INTERVAL    = 2000   -- ms between state polls when connected
+local POLL_INTERVAL    = 250   -- ms between state polls when connected
 local RETRY_DELAY     = 10000  -- ms between reconnect attempts when YTM is absent
 local PAIR_TIMEOUT    = 35000  -- ms to wait for user to approve pairing (API max 30s)
 

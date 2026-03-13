@@ -33,7 +33,7 @@ function M.passive(key, state)
     }
 end
 
-function M.trigger(key, state)
+function M.trigger(state)
     if not ytm.connected() then return end
     ytm.shuffle()
     state.flash = 2  -- arm the flash
