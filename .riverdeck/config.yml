@@ -1,5 +1,5 @@
 application:
-  brightness: 65
+  brightness: 70
   passive_fps: 15
   timeout: 30
   debug: false

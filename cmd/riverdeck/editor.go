@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -29,7 +30,12 @@ func (a *App) OpenEditor() {
 		log.Printf("[!] Editor binary not found: %s", helper)
 		return
 	}
-	cmd := exec.Command(helper, "-configdir", a.configPath)
+	cmd := exec.Command(helper,
+		"-configdir", a.configPath,
+		"-cols", fmt.Sprintf("%d", a.device.Cols()),
+		"-rows", fmt.Sprintf("%d", a.device.Rows()),
+		"-model", a.device.ModelName(),
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if startErr := cmd.Start(); startErr != nil {

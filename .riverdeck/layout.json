@@ -6,28 +6,32 @@
         {
           "slot": 0,
           "label": "HOME",
-          "action": "home",
-          "icon": "pkg://riverdeck/icons/home.svg"
+          "icon": "pkg://riverdeck/icons/home.svg",
+          "action": "home"
         },
         {
           "slot": 1,
           "label": "Media",
+          "icon": "pkg://riverdeck/icons/folder.svg",
           "action": "page",
-          "target_page": "Media",
-          "icon": "pkg://riverdeck/icons/folder.svg"
+          "target_page": "Media"
         },
         {
           "slot": 2,
           "label": "System",
+          "icon": "pkg://riverdeck/icons/folder.svg",
           "action": "page",
-          "target_page": "System",
-          "icon": "pkg://riverdeck/icons/folder.svg"
+          "target_page": "System"
         },
         {
           "slot": 14,
           "label": "Settings",
-          "action": "settings",
-          "icon": "pkg://riverdeck/icons/settings.svg"
+          "icon": "pkg://riverdeck/icons/settings.svg",
+          "action": "settings"
+        },
+        {
+          "slot": 4,
+          "label": "Fuck"
         }
       ]
     },
@@ -37,14 +41,14 @@
         {
           "slot": 0,
           "label": "HOME",
-          "action": "home",
-          "icon": "pkg://riverdeck/icons/home.svg"
+          "icon": "pkg://riverdeck/icons/home.svg",
+          "action": "home"
         },
         {
           "slot": 5,
           "label": "Back",
-          "action": "back",
-          "icon": "pkg://riverdeck/icons/back.svg"
+          "icon": "pkg://riverdeck/icons/back.svg",
+          "action": "back"
         }
       ]
     },
@@ -54,14 +58,14 @@
         {
           "slot": 0,
           "label": "HOME",
-          "action": "home",
-          "icon": "pkg://riverdeck/icons/home.svg"
+          "icon": "pkg://riverdeck/icons/home.svg",
+          "action": "home"
         },
         {
           "slot": 5,
           "label": "Back",
-          "action": "back",
-          "icon": "pkg://riverdeck/icons/back.svg"
+          "icon": "pkg://riverdeck/icons/back.svg",
+          "action": "back"
         }
       ]
     }

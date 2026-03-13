@@ -1,852 +1,1580 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Riverdeck Editor</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden}
-body{font-family:system-ui,sans-serif;background:#111;color:#e0e0e0;display:flex;flex-direction:column}
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Riverdeck Editor</title>
+	<style>
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0
+		}
 
-/* ── Tokens ── */
-:root{
-  --bg0:#111;--bg1:#1a1a1a;--bg2:#222;--bg3:#2a2a2a;--bg4:#333;
-  --border:#2d2d2d;--border2:#3a3a3a;
-  --txt:#e0e0e0;--txt2:#aaa;--txt3:#666;
-  --blue:#2563eb;--blue-l:#3b82f6;--blue-d:#1d4ed8;
-  --green:#16a34a;--green-l:#22c55e;
-  --red:#dc2626;--red-l:#f87171;
-  --amber:#d97706;--amber-l:#fbbf24;
-  --purple:#7c3aed;--purple-l:#a78bfa;
-  --radius:5px;
-}
+		html,
+		body {
+			height: 100%;
+			overflow: hidden
+		}
 
-/* ── Shared ── */
-button{cursor:pointer;border:none;border-radius:var(--radius);padding:5px 12px;font-size:.82rem;font-weight:500;transition:background .12s}
-.btn-primary{background:var(--blue);color:#fff}    .btn-primary:hover{background:var(--blue-d)}
-.btn-success{background:var(--green);color:#fff}   .btn-success:hover{filter:brightness(1.1)}
-.btn-danger{background:var(--red);color:#fff}      .btn-danger:hover{filter:brightness(1.1)}
-.btn-ghost{background:var(--bg3);color:var(--txt2)}.btn-ghost:hover{background:var(--bg4)}
-.btn-amber{background:var(--amber);color:#fff}     .btn-amber:hover{filter:brightness(1.1)}
-.spacer{flex:1}
-input,select,textarea{background:var(--bg2);border:1px solid var(--bg4);color:var(--txt);border-radius:var(--radius);padding:5px 7px;font-size:.82rem;width:100%}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue-l)}
-select option{background:var(--bg2)}
-label{display:block;font-size:.72rem;color:var(--txt3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
-.form-row{margin-bottom:10px}
-textarea{resize:vertical;font-family:monospace}
+		body {
+			font-family: system-ui, sans-serif;
+			background: #111;
+			color: #e0e0e0;
+			display: flex;
+			flex-direction: column
+		}
 
-/* ── Header ── */
-header{
-  display:flex;align-items:center;gap:10px;
-  padding:8px 14px;
-  background:var(--bg0);
-  border-bottom:1px solid var(--border);
-  flex-shrink:0;
-  min-height:46px;
-}
-header h1{font-size:.95rem;font-weight:700;color:#fff;white-space:nowrap}
-#hdr-device{font-size:.75rem;color:var(--txt3);white-space:nowrap}
-#mode-toggle{display:flex;gap:0;border-radius:var(--radius);overflow:hidden;border:1px solid var(--bg4)}
-#mode-toggle button{border-radius:0;padding:4px 12px;background:var(--bg3);color:var(--txt3);border:none;font-size:.8rem}
-#mode-toggle button.active{background:var(--blue);color:#fff}
-#save-errors{
-  display:none;
-  background:#3b0000;border:1px solid var(--red);color:var(--red-l);
-  border-radius:var(--radius);padding:5px 10px;font-size:.78rem;max-width:480px;
-  white-space:pre-line;line-height:1.5;
-}
+		/* ── Tokens ── */
+		:root {
+			--bg0: #111;
+			--bg1: #1a1a1a;
+			--bg2: #222;
+			--bg3: #2a2a2a;
+			--bg4: #333;
+			--border: #2d2d2d;
+			--border2: #3a3a3a;
+			--txt: #e0e0e0;
+			--txt2: #aaa;
+			--txt3: #666;
+			--blue: #2563eb;
+			--blue-l: #3b82f6;
+			--blue-d: #1d4ed8;
+			--green: #16a34a;
+			--green-l: #22c55e;
+			--red: #dc2626;
+			--red-l: #f87171;
+			--amber: #d97706;
+			--amber-l: #fbbf24;
+			--purple: #7c3aed;
+			--purple-l: #a78bfa;
+			--radius: 5px;
+		}
 
-/* ── Body layout: left 75% / right 25% ── */
-#body{display:flex;flex:1;overflow:hidden}
+		/* ── Shared ── */
+		button {
+			cursor: pointer;
+			border: none;
+			border-radius: var(--radius);
+			padding: 5px 12px;
+			font-size: .82rem;
+			font-weight: 500;
+			transition: background .12s
+		}
 
-/* ── Left column (grid + config) ── */
-#left{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden}
+		.btn-primary {
+			background: var(--blue);
+			color: #fff
+		}
 
-/* page tabs */
-#page-tabs{
-  display:flex;align-items:center;gap:0;
-  background:var(--bg0);border-bottom:1px solid var(--border);
-  flex-shrink:0;overflow-x:auto;
-}
-#page-tabs::-webkit-scrollbar{height:4px}#page-tabs::-webkit-scrollbar-thumb{background:var(--bg4)}
-.page-tab{
-  padding:7px 14px;font-size:.82rem;cursor:pointer;white-space:nowrap;
-  background:var(--bg0);color:var(--txt3);border-right:1px solid var(--border);
-  border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;
-}
-.page-tab:hover{background:var(--bg2);color:var(--txt)}
-.page-tab.active{color:var(--blue-l);border-bottom-color:var(--blue-l);background:var(--bg1)}
-.page-tab .tab-err{color:var(--red-l);font-size:.65rem}
-.page-tab .tab-del{color:var(--txt3);font-size:.7rem;cursor:pointer;padding:0 2px}
-.page-tab .tab-del:hover{color:var(--red-l)}
-#tab-add{padding:7px 12px;font-size:.82rem;color:var(--txt3);cursor:pointer;background:var(--bg0);border:none}
-#tab-add:hover{color:var(--txt)}
+		.btn-primary:hover {
+			background: var(--blue-d)
+		}
 
-/* deck grid area */
-#grid-scroll{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:20px;background:var(--bg1)}
-#deck-grid{display:grid;gap:6px}
-.key-cell{
-  width:82px;height:82px;border-radius:8px;border:2px solid var(--border2);
-  background:var(--bg2);display:flex;flex-direction:column;align-items:center;
-  justify-content:center;cursor:pointer;font-size:.68rem;font-weight:500;
-  padding:5px;word-break:break-word;text-align:center;position:relative;
-  transition:border-color .1s,background .1s;color:var(--txt2);gap:3px;
-  user-select:none;
-}
-.key-cell:hover:not(.reserved){border-color:var(--bg4);background:var(--bg3)}
-.key-cell.selected{border-color:var(--blue-l)!important;background:#162040!important}
-.key-cell.reserved{background:#0a0a0a;border-color:#1a1a1a;cursor:not-allowed;opacity:.5}
-.key-cell.has-script{background:#0a2018;border-color:#1a4d2a;color:#86efac}
-.key-cell.has-page{background:#0a1628;border-color:#1a3460;color:#93c5fd}
-.key-cell.has-back{background:var(--bg3);border-color:var(--bg4);color:var(--txt3)}
-.key-cell.action-home{background:#1a1200;border-color:var(--amber);color:var(--amber-l)}
-.key-cell.action-settings{background:#130a28;border-color:var(--purple);color:var(--purple-l)}
-.key-cell .slot-num{position:absolute;top:3px;right:5px;font-size:.58rem;color:var(--txt3)}
-.key-cell .key-label{overflow:hidden;max-width:100%;max-height:2.4em;line-height:1.2em}
-.key-cell .badge{font-size:.52rem;background:var(--bg4);border-radius:3px;padding:1px 4px;color:var(--txt2);text-transform:uppercase}
-.key-cell img.key-icon{width:32px;height:32px;object-fit:contain;border-radius:4px;pointer-events:none}
-.lock-icon{position:absolute;top:3px;left:4px;font-size:.65rem;opacity:.7}
+		.btn-success {
+			background: var(--green);
+			color: #fff
+		}
 
-/* ── button config panel (bottom third of left) ── */
-#config-panel{
-  flex-shrink:0;height:36%;min-height:180px;max-height:420px;
-  border-top:1px solid var(--border);background:var(--bg0);
-  display:flex;flex-direction:column;overflow:hidden;
-}
-#config-panel-header{
-  display:flex;align-items:center;gap:8px;padding:7px 12px;
-  border-bottom:1px solid var(--border);flex-shrink:0;
-}
-#config-panel-header h3{font-size:.78rem;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.05em}
-#config-tabs{display:flex;gap:0;border-radius:var(--radius);overflow:hidden;border:1px solid var(--bg4);margin-left:auto}
-#config-tabs button{border-radius:0;padding:3px 10px;font-size:.75rem;background:var(--bg3);color:var(--txt3);border:none}
-#config-tabs button.active{background:var(--blue);color:#fff}
-#config-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+		.btn-success:hover {
+			filter: brightness(1.1)
+		}
 
-/* form tab */
-#form-tab{flex:1;overflow-y:auto;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
-#form-tab .form-row{width:calc(50% - 4px);min-width:160px;flex:1}
-#form-tab .form-row.full{width:100%;flex-basis:100%}
-#btn-actions{display:flex;gap:6px;padding:8px 12px;flex-shrink:0;justify-content:flex-end;border-top:1px solid var(--border)}
+		.btn-danger {
+			background: var(--red);
+			color: #fff
+		}
 
-/* monaco tab */
-#monaco-tab{flex:1;display:none;overflow:hidden;background:#1e1e1e;min-height:0}
+		.btn-danger:hover {
+			filter: brightness(1.1)
+		}
 
-/* ── Right column: package browser ── */
-#pkg-panel{
-  width:25%;min-width:200px;max-width:320px;
-  background:var(--bg0);border-left:1px solid var(--border);
-  display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;
-}
-#pkg-panel-header{padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
-#pkg-panel-header h3{font-size:.78rem;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.05em}
-#pkg-search{width:calc(100% - 24px);margin:8px 12px;display:block;padding:5px 8px;font-size:.8rem}
-#pkg-body{flex:1;overflow-y:auto;padding:0 0 8px}
-#pkg-body::-webkit-scrollbar{width:5px}#pkg-body::-webkit-scrollbar-thumb{background:var(--bg4)}
-details.pkg-group{border-bottom:1px solid var(--border)}
-details.pkg-group summary{
-  cursor:pointer;padding:7px 12px;font-size:.8rem;font-weight:600;
-  color:var(--txt2);list-style:none;display:flex;align-items:center;gap:6px;
-  background:var(--bg0);user-select:none;
-}
-details.pkg-group summary::-webkit-details-marker{display:none}
-details.pkg-group summary::before{content:'▶';font-size:.6rem;transition:transform .15s}
-details.pkg-group[open] summary::before{transform:rotate(90deg)}
-details.pkg-group summary:hover{background:var(--bg2)}
-.pkg-tmpl{
-  display:flex;align-items:center;gap:8px;padding:6px 12px 6px 20px;
-  cursor:pointer;border-top:1px solid var(--border);
-}
-.pkg-tmpl:hover{background:var(--bg2)}
-.pkg-tmpl img{width:28px;height:28px;border-radius:4px;object-fit:contain;flex-shrink:0;background:var(--bg3)}
-.pkg-tmpl-info{flex:1;min-width:0}
-.pkg-tmpl-info .tmpl-label{font-size:.8rem;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pkg-tmpl-info .tmpl-desc{font-size:.68rem;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pkg-badge{font-size:.6rem;background:var(--blue);color:#fff;border-radius:3px;padding:1px 4px;flex-shrink:0}
-.pkg-no-results{padding:20px 12px;font-size:.8rem;color:var(--txt3);text-align:center}
+		.btn-ghost {
+			background: var(--bg3);
+			color: var(--txt2)
+		}
 
-/* ── Toast ── */
-#toast{
-  position:fixed;bottom:18px;right:18px;
-  background:var(--bg2);color:var(--txt);
-  padding:8px 16px;border-radius:var(--radius);font-size:.82rem;
-  border:1px solid var(--border2);opacity:0;transition:opacity .2s;
-  pointer-events:none;z-index:9999;max-width:380px;
-}
-#toast.show{opacity:1}
-#toast.err{border-color:var(--red);color:var(--red-l)}
-</style>
+		.btn-ghost:hover {
+			background: var(--bg4)
+		}
+
+		.btn-amber {
+			background: var(--amber);
+			color: #fff
+		}
+
+		.btn-amber:hover {
+			filter: brightness(1.1)
+		}
+
+		.spacer {
+			flex: 1
+		}
+
+		input,
+		select,
+		textarea {
+			background: var(--bg2);
+			border: 1px solid var(--bg4);
+			color: var(--txt);
+			border-radius: var(--radius);
+			padding: 5px 7px;
+			font-size: .82rem;
+			width: 100%
+		}
+
+		input:focus,
+		select:focus,
+		textarea:focus {
+			outline: none;
+			border-color: var(--blue-l)
+		}
+
+		select option {
+			background: var(--bg2)
+		}
+
+		label {
+			display: block;
+			font-size: .72rem;
+			color: var(--txt3);
+			margin-bottom: 3px;
+			text-transform: uppercase;
+			letter-spacing: .04em
+		}
+
+		.form-row {
+			margin-bottom: 10px
+		}
+
+		textarea {
+			resize: vertical;
+			font-family: monospace
+		}
+
+		/* ── Header ── */
+		header {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 8px 14px;
+			background: var(--bg0);
+			border-bottom: 1px solid var(--border);
+			flex-shrink: 0;
+			min-height: 46px;
+		}
+
+		header h1 {
+			font-size: .95rem;
+			font-weight: 700;
+			color: #fff;
+			white-space: nowrap
+		}
+
+		#hdr-device {
+			font-size: .75rem;
+			color: var(--txt3);
+			white-space: nowrap
+		}
+
+		#mode-toggle {
+			display: flex;
+			gap: 0;
+			border-radius: var(--radius);
+			overflow: hidden;
+			border: 1px solid var(--bg4)
+		}
+
+		#mode-toggle button {
+			border-radius: 0;
+			padding: 4px 12px;
+			background: var(--bg3);
+			color: var(--txt3);
+			border: none;
+			font-size: .8rem
+		}
+
+		#mode-toggle button.active {
+			background: var(--blue);
+			color: #fff
+		}
+
+		#save-errors {
+			display: none;
+			background: #3b0000;
+			border: 1px solid var(--red);
+			color: var(--red-l);
+			border-radius: var(--radius);
+			padding: 5px 10px;
+			font-size: .78rem;
+			max-width: 480px;
+			white-space: pre-line;
+			line-height: 1.5;
+		}
+
+		/* ── Body layout: left 75% / right 25% ── */
+		#body {
+			display: flex;
+			flex: 1;
+			overflow: hidden
+		}
+
+		/* ── Left column (grid + config) ── */
+		#left {
+			display: flex;
+			flex-direction: column;
+			flex: 1;
+			min-width: 0;
+			overflow: hidden
+		}
+
+		/* page tabs */
+		#page-tabs {
+			display: flex;
+			align-items: center;
+			gap: 0;
+			background: var(--bg0);
+			border-bottom: 1px solid var(--border);
+			flex-shrink: 0;
+			overflow-x: auto;
+		}
+
+		#page-tabs::-webkit-scrollbar {
+			height: 4px
+		}
+
+		#page-tabs::-webkit-scrollbar-thumb {
+			background: var(--bg4)
+		}
+
+		.page-tab {
+			padding: 7px 14px;
+			font-size: .82rem;
+			cursor: pointer;
+			white-space: nowrap;
+			background: var(--bg0);
+			color: var(--txt3);
+			border-right: 1px solid var(--border);
+			border-bottom: 2px solid transparent;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.page-tab:hover {
+			background: var(--bg2);
+			color: var(--txt)
+		}
+
+		.page-tab.active {
+			color: var(--blue-l);
+			border-bottom-color: var(--blue-l);
+			background: var(--bg1)
+		}
+
+		.page-tab .tab-err {
+			color: var(--red-l);
+			font-size: .65rem
+		}
+
+		.page-tab .tab-del {
+			color: var(--txt3);
+			font-size: .7rem;
+			cursor: pointer;
+			padding: 0 2px
+		}
+
+		.page-tab .tab-del:hover {
+			color: var(--red-l)
+		}
+
+		#tab-add {
+			padding: 7px 12px;
+			font-size: .82rem;
+			color: var(--txt3);
+			cursor: pointer;
+			background: var(--bg0);
+			border: none
+		}
+
+		#tab-add:hover {
+			color: var(--txt)
+		}
+
+		/* deck grid area */
+		#grid-scroll {
+			flex: 1;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			overflow: auto;
+			padding: 20px;
+			background: var(--bg1)
+		}
+
+		#deck-grid {
+			display: grid;
+			gap: 6px
+		}
+
+		.key-cell {
+			width: 82px;
+			height: 82px;
+			border-radius: 8px;
+			border: 2px solid var(--border2);
+			background: var(--bg2);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			cursor: pointer;
+			font-size: .68rem;
+			font-weight: 500;
+			padding: 5px;
+			word-break: break-word;
+			text-align: center;
+			position: relative;
+			transition: border-color .1s, background .1s;
+			color: var(--txt2);
+			gap: 3px;
+			user-select: none;
+		}
+
+		.key-cell:hover:not(.reserved) {
+			border-color: var(--bg4);
+			background: var(--bg3)
+		}
+
+		.key-cell.selected {
+			border-color: var(--blue-l) !important;
+			background: #162040 !important
+		}
+
+		.key-cell.reserved {
+			background: #0a0a0a;
+			border-color: #1a1a1a;
+			cursor: not-allowed;
+			opacity: .5
+		}
+
+		.key-cell.has-script {
+			background: #0a2018;
+			border-color: #1a4d2a;
+			color: #86efac
+		}
+
+		.key-cell.has-page {
+			background: #0a1628;
+			border-color: #1a3460;
+			color: #93c5fd
+		}
+
+		.key-cell.has-back {
+			background: var(--bg3);
+			border-color: var(--bg4);
+			color: var(--txt3)
+		}
+
+		.key-cell.action-home {
+			background: #1a1200;
+			border-color: var(--amber);
+			color: var(--amber-l)
+		}
+
+		.key-cell.action-settings {
+			background: #130a28;
+			border-color: var(--purple);
+			color: var(--purple-l)
+		}
+
+		.key-cell .slot-num {
+			position: absolute;
+			top: 3px;
+			right: 5px;
+			font-size: .58rem;
+			color: var(--txt3)
+		}
+
+		.key-cell .key-label {
+			overflow: hidden;
+			max-width: 100%;
+			max-height: 2.4em;
+			line-height: 1.2em
+		}
+
+		.key-cell .badge {
+			font-size: .52rem;
+			background: var(--bg4);
+			border-radius: 3px;
+			padding: 1px 4px;
+			color: var(--txt2);
+			text-transform: uppercase
+		}
+
+		.key-cell img.key-icon {
+			width: 32px;
+			height: 32px;
+			object-fit: contain;
+			border-radius: 4px;
+			pointer-events: none
+		}
+
+		.lock-icon {
+			position: absolute;
+			top: 3px;
+			left: 4px;
+			font-size: .65rem;
+			opacity: .7
+		}
+
+		/* ── button config panel (bottom third of left) ── */
+		#config-panel {
+			flex-shrink: 0;
+			height: 36%;
+			min-height: 180px;
+			max-height: 420px;
+			border-top: 1px solid var(--border);
+			background: var(--bg0);
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+		}
+
+		#config-panel-header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 7px 12px;
+			border-bottom: 1px solid var(--border);
+			flex-shrink: 0;
+		}
+
+		#config-panel-header h3 {
+			font-size: .78rem;
+			font-weight: 600;
+			color: var(--txt2);
+			text-transform: uppercase;
+			letter-spacing: .05em
+		}
+
+		#config-tabs {
+			display: flex;
+			gap: 0;
+			border-radius: var(--radius);
+			overflow: hidden;
+			border: 1px solid var(--bg4);
+			margin-left: auto
+		}
+
+		#config-tabs button {
+			border-radius: 0;
+			padding: 3px 10px;
+			font-size: .75rem;
+			background: var(--bg3);
+			color: var(--txt3);
+			border: none
+		}
+
+		#config-tabs button.active {
+			background: var(--blue);
+			color: #fff
+		}
+
+		#config-body {
+			flex: 1;
+			overflow: hidden;
+			display: flex;
+			flex-direction: column
+		}
+
+		/* form tab */
+		#form-tab {
+			flex: 1;
+			overflow-y: auto;
+			padding: 12px;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			align-content: flex-start
+		}
+
+		#form-tab .form-row {
+			width: calc(50% - 4px);
+			min-width: 160px;
+			flex: 1
+		}
+
+		#form-tab .form-row.full {
+			width: 100%;
+			flex-basis: 100%
+		}
+
+		#btn-actions {
+			display: flex;
+			gap: 6px;
+			padding: 8px 12px;
+			flex-shrink: 0;
+			justify-content: flex-end;
+			border-top: 1px solid var(--border)
+		}
+
+		/* monaco tab */
+		#monaco-tab {
+			flex: 1;
+			display: none;
+			overflow: hidden;
+			background: #1e1e1e;
+			min-height: 0
+		}
+
+		/* ── Right column: package browser ── */
+		#pkg-panel {
+			width: 25%;
+			min-width: 200px;
+			max-width: 320px;
+			background: var(--bg0);
+			border-left: 1px solid var(--border);
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+			flex-shrink: 0;
+		}
+
+		#pkg-panel-header {
+			padding: 8px 12px;
+			border-bottom: 1px solid var(--border);
+			flex-shrink: 0
+		}
+
+		#pkg-panel-header h3 {
+			font-size: .78rem;
+			font-weight: 600;
+			color: var(--txt2);
+			text-transform: uppercase;
+			letter-spacing: .05em
+		}
+
+		#pkg-search {
+			width: calc(100% - 24px);
+			margin: 8px 12px;
+			display: block;
+			padding: 5px 8px;
+			font-size: .8rem
+		}
+
+		#pkg-body {
+			flex: 1;
+			overflow-y: auto;
+			padding: 0 0 8px
+		}
+
+		#pkg-body::-webkit-scrollbar {
+			width: 5px
+		}
+
+		#pkg-body::-webkit-scrollbar-thumb {
+			background: var(--bg4)
+		}
+
+		details.pkg-group {
+			border-bottom: 1px solid var(--border)
+		}
+
+		details.pkg-group summary {
+			cursor: pointer;
+			padding: 7px 12px;
+			font-size: .8rem;
+			font-weight: 600;
+			color: var(--txt2);
+			list-style: none;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			background: var(--bg0);
+			user-select: none;
+		}
+
+		details.pkg-group summary::-webkit-details-marker {
+			display: none
+		}
+
+		details.pkg-group summary::before {
+			content: '▶';
+			font-size: .6rem;
+			transition: transform .15s
+		}
+
+		details.pkg-group[open] summary::before {
+			transform: rotate(90deg)
+		}
+
+		details.pkg-group summary:hover {
+			background: var(--bg2)
+		}
+
+		.pkg-tmpl {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 12px 6px 20px;
+			cursor: pointer;
+			border-top: 1px solid var(--border);
+		}
+
+		.pkg-tmpl:hover {
+			background: var(--bg2)
+		}
+
+		.pkg-tmpl img {
+			width: 28px;
+			height: 28px;
+			border-radius: 4px;
+			object-fit: contain;
+			flex-shrink: 0;
+			background: var(--bg3)
+		}
+
+		.pkg-tmpl-info {
+			flex: 1;
+			min-width: 0
+		}
+
+		.pkg-tmpl-info .tmpl-label {
+			font-size: .8rem;
+			color: var(--txt);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis
+		}
+
+		.pkg-tmpl-info .tmpl-desc {
+			font-size: .68rem;
+			color: var(--txt3);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis
+		}
+
+		.pkg-badge {
+			font-size: .6rem;
+			background: var(--blue);
+			color: #fff;
+			border-radius: 3px;
+			padding: 1px 4px;
+			flex-shrink: 0
+		}
+
+		.pkg-no-results {
+			padding: 20px 12px;
+			font-size: .8rem;
+			color: var(--txt3);
+			text-align: center
+		}
+
+		/* ── App settings overlay ── */
+		#settings-overlay {
+			display: none;
+			position: fixed;
+			inset: 0;
+			z-index: 100;
+			background: rgba(0, 0, 0, .72);
+			align-items: center;
+			justify-content: center;
+		}
+
+		#settings-overlay.open {
+			display: flex
+		}
+
+		#settings-box {
+			background: var(--bg1);
+			border: 1px solid var(--border2);
+			border-radius: 8px;
+			width: 480px;
+			max-height: 88vh;
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+		}
+
+		#settings-box-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 11px 16px;
+			border-bottom: 1px solid var(--border);
+			flex-shrink: 0;
+		}
+
+		#settings-box-header h2 {
+			font-size: .88rem;
+			font-weight: 700;
+			color: var(--txt)
+		}
+
+		#settings-body {
+			flex: 1;
+			overflow-y: auto;
+			padding: 16px
+		}
+
+		#settings-body::-webkit-scrollbar {
+			width: 5px
+		}
+
+		#settings-body::-webkit-scrollbar-thumb {
+			background: var(--bg4)
+		}
+
+		#settings-body h4 {
+			font-size: .7rem;
+			font-weight: 700;
+			color: var(--txt3);
+			text-transform: uppercase;
+			letter-spacing: .06em;
+			margin: 14px 0 8px;
+			padding-bottom: 4px;
+			border-bottom: 1px solid var(--border);
+		}
+
+		#settings-body h4:first-child {
+			margin-top: 0
+		}
+
+		#settings-footer {
+			display: flex;
+			justify-content: flex-end;
+			gap: 8px;
+			padding: 10px 16px;
+			border-top: 1px solid var(--border);
+			flex-shrink: 0;
+		}
+
+		/* ── Toast ── */
+		#toast {
+			position: fixed;
+			bottom: 18px;
+			right: 18px;
+			background: var(--bg2);
+			color: var(--txt);
+			padding: 8px 16px;
+			border-radius: var(--radius);
+			font-size: .82rem;
+			border: 1px solid var(--border2);
+			opacity: 0;
+			transition: opacity .2s;
+			pointer-events: none;
+			z-index: 9999;
+			max-width: 380px;
+		}
+
+		#toast.show {
+			opacity: 1
+		}
+
+		#toast.err {
+			border-color: var(--red);
+			color: var(--red-l)
+		}
+	</style>
 </head>
+
 <body>
 
-<!-- ── Header ── -->
-<header>
-  <h1>Riverdeck Editor</h1>
-  <span id="hdr-device"></span>
-  <div id="mode-toggle">
-    <button id="btn-mode-folder" onclick="setMode('folder')">Folder</button>
-    <button id="btn-mode-layout" onclick="setMode('layout')">Layout</button>
-  </div>
-  <div class="spacer"></div>
-  <div id="save-errors"></div>
-  <button class="btn-ghost" onclick="reloadFromDisk()">Reload</button>
-  <button class="btn-success" onclick="saveLayout()">Save</button>
-</header>
-
-<!-- ── Body ── -->
-<div id="body">
-
-  <!-- ── Left ── -->
-  <div id="left">
-    <!-- page tabs -->
-    <div id="page-tabs">
-      <span id="tab-add" onclick="addPage()">+ Page</span>
-    </div>
-
-    <!-- grid -->
-    <div id="grid-scroll">
-      <div id="deck-grid"></div>
-    </div>
-
-    <!-- button config -->
-    <div id="config-panel">
-      <div id="config-panel-header">
-        <h3 id="config-panel-title">Button config</h3>
-        <div id="config-tabs" style="display:none">
-          <button id="ctab-form" class="active" onclick="switchConfigTab('form')">Properties</button>
-          <button id="ctab-monaco" onclick="switchConfigTab('monaco')" style="display:none">Lua editor</button>
-        </div>
-      </div>
-      <div id="config-body">
-        <div id="form-tab">
-          <p id="form-hint" style="color:var(--txt3);font-size:.82rem;padding:8px">Click a button to edit it</p>
-        </div>
-        <div id="monaco-tab"></div>
-      </div>
-      <div id="btn-actions" style="display:none">
-        <button class="btn-danger" onclick="deleteButton()">Delete</button>
-        <button class="btn-primary" onclick="applyButton()">Apply</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Right: package browser ── -->
-  <div id="pkg-panel">
-    <div id="pkg-panel-header"><h3>Packages</h3></div>
-    <input id="pkg-search" type="search" placeholder="Filter templates..." oninput="renderPackages()">
-    <div id="pkg-body"></div>
-  </div>
-</div>
-
-<div id="toast"></div>
-
-<!-- Monaco loader -->
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js"></script>
-
-<script>
-'use strict';
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let device   = {cols:5, rows:3, keys:15, model_name:'', reserved_keys:[]};
-let layout   = {pages:[]};
-let packages = [];
-let scripts  = [];
-let mode     = 'folder';
-
-let currentPageIdx = 0;
-let selectedSlot   = null;
-let pendingButton  = null;
-
-// Monaco
-let monacoReady = false;
-let monacoEditor = null;
-let monacoCurrentPath = null;
-let activeConfigTab = 'form';
-
-// ── Monaco init ───────────────────────────────────────────────────────────────
-require.config({paths:{vs:'https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs'}});
-require(['vs/editor/editor.main'], function() {
-  monacoReady = true;
-  monacoEditor = monaco.editor.create(document.getElementById('monaco-tab'), {
-    value: '-- select a script button and click "Lua editor" to edit',
-    language: 'lua',
-    theme: 'vs-dark',
-    automaticLayout: true,
-    minimap: {enabled: false},
-    fontSize: 13,
-    scrollBeyondLastLine: false,
-    wordWrap: 'on',
-  });
-  monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveLuaFile());
-});
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-async function boot() {
-  try {
-    const [dev, lay, pkgs, scr, modeRes] = await Promise.all([
-      fetch('/api/device').then(r=>r.json()),
-      fetch('/api/layout').then(r=>r.json()),
-      fetch('/api/packages').then(r=>r.json()),
-      fetch('/api/scripts').then(r=>r.json()),
-      fetch('/api/mode').then(r=>r.json()),
-    ]);
-    device   = dev;
-    layout   = lay || {pages:[]};
-    packages = pkgs || [];
-    scripts  = scr || [];
-    mode     = modeRes.style || 'folder';
-
-    document.getElementById('hdr-device').textContent =
-      device.model_name + ' (' + device.cols + 'x' + device.rows + ')';
-    updateModeToggle();
-    renderAll();
-  } catch(e) {
-    toast('Failed to load: '+e, true);
-  }
-}
-
-async function reloadFromDisk() {
-  try {
-    const [lay, scr] = await Promise.all([
-      fetch('/api/layout').then(r=>r.json()),
-      fetch('/api/scripts').then(r=>r.json()),
-    ]);
-    layout = lay || {pages:[]}; scripts = scr || [];
-    selectedSlot = null; pendingButton = null;
-    renderAll();
-    toast('Reloaded from disk');
-  } catch(e) {
-    toast('Reload failed: '+e, true);
-  }
-}
-
-// ── Mode ──────────────────────────────────────────────────────────────────────
-function updateModeToggle() {
-  document.getElementById('btn-mode-folder').classList.toggle('active', mode==='folder');
-  document.getElementById('btn-mode-layout').classList.toggle('active', mode==='layout');
-}
-
-async function setMode(newMode) {
-  if (newMode === mode) return;
-  try {
-    const resp = await fetch('/api/mode', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({style: newMode}),
-    });
-    if (!resp.ok) throw new Error(await resp.text());
-    mode = newMode;
-    selectedSlot = null; pendingButton = null;
-    updateModeToggle();
-    renderAll();
-    toast('Mode: ' + newMode);
-  } catch(e) { toast('Mode change failed: '+e, true); }
-}
-
-// ── Layout save/load ──────────────────────────────────────────────────────────
-async function saveLayout() {
-  hideSaveErrors();
-  try {
-    const resp = await fetch('/api/layout', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(layout),
-    });
-    if (resp.status === 400) {
-      const body = await resp.json();
-      showSaveErrors(body.errors || ['Unknown validation error']);
-      return;
-    }
-    if (!resp.ok) throw new Error(await resp.text());
-    toast('Saved');
-    renderPageTabs();
-  } catch(e) { toast('Save failed: '+e, true); }
-}
-
-function showSaveErrors(errs) {
-  const el = document.getElementById('save-errors');
-  el.textContent = errs.join('\n');
-  el.style.display = 'block';
-}
-function hideSaveErrors() {
-  document.getElementById('save-errors').style.display = 'none';
-}
-
-// ── Render coordination ───────────────────────────────────────────────────────
-function renderAll() {
-  renderPageTabs();
-  renderGrid();
-  renderConfigPanel();
-  renderPackages();
-}
-
-// ── Page tabs ─────────────────────────────────────────────────────────────────
-function renderPageTabs() {
-  const container = document.getElementById('page-tabs');
-  const addBtn = document.getElementById('tab-add');
-  // Remove old tabs
-  Array.from(container.querySelectorAll('.page-tab')).forEach(el => el.remove());
-
-  (layout.pages||[]).forEach((page, i) => {
-    const tab = document.createElement('div');
-    tab.className = 'page-tab' + (i===currentPageIdx ? ' active' : '');
-    const hasHome = pageHasHome(page);
-    const warnHTML = (!hasHome && mode==='layout')
-      ? '<span class="tab-err" title="Missing SET/HOME button">!</span>'
-      : '';
-    const delHTML = '<span class="tab-del" title="Delete page">x</span>';
-    tab.innerHTML = '<span class="tab-name">' + esc(page.name||'Page '+(i+1)) + '</span>' + warnHTML + delHTML;
-    tab.querySelector('.tab-del').addEventListener('click', function(e){
-      e.stopPropagation();
-      deletePage(i);
-    });
-    tab.addEventListener('click', function(){ currentPageIdx=i; selectedSlot=null; pendingButton=null; renderAll(); });
-    container.insertBefore(tab, addBtn);
-  });
-}
-
-function pageHasHome(page) {
-  return (page.buttons||[]).some(function(b){ return b.action==='home'; });
-}
-
-// ── Grid ──────────────────────────────────────────────────────────────────────
-function renderGrid() {
-  const grid = document.getElementById('deck-grid');
-  grid.style.gridTemplateColumns = 'repeat(' + device.cols + ', 82px)';
-  grid.innerHTML = '';
-  const pg = currentPage();
-  const btnMap = {};
-  if (pg) (pg.buttons||[]).forEach(function(b){ btnMap[b.slot]=b; });
-
-  for (let i=0; i<device.keys; i++) {
-    const btn = btnMap[i];
-    const reserved = isReservedKey(i);
-    const el = document.createElement('div');
-    el.className = 'key-cell';
-    if (reserved) el.classList.add('reserved');
-    if (i===selectedSlot) el.classList.add('selected');
-
-    if (btn && !reserved) {
-      const act = btn.action||'script';
-      if      (act==='home')     el.classList.add('action-home');
-      else if (act==='settings') el.classList.add('action-settings');
-      else if (act==='page')     el.classList.add('has-page');
-      else if (act==='back')     el.classList.add('has-back');
-      else if (btn.script||btn.template) el.classList.add('has-script');
-    }
-
-    let inner = '<span class="slot-num">' + i + '</span>';
-    if (reserved) inner += '<span class="lock-icon">&#x1F512;</span>';
-
-    if (btn) {
-      if (btn.icon) {
-        const iconURL = resolveIconURL(btn.icon);
-        inner += '<img class="key-icon" src="' + esc(iconURL) + '" loading="lazy" onerror="this.style.display=\'none\'">';
-      }
-      inner += '<span class="key-label">' + esc(btn.label||'') + '</span>';
-      if (btn.action && btn.action!=='script') {
-        inner += '<span class="badge">' + esc(btn.action) + '</span>';
-      }
-    }
-    el.innerHTML = inner;
-
-    if (!reserved) {
-      (function(slot){
-        el.addEventListener('click', function(){ selectedSlot=slot; initPending(); renderGrid(); renderConfigPanel(); });
-      })(i);
-    }
-    grid.appendChild(el);
-  }
-}
-
-function isReservedKey(slot) {
-  if (mode === 'folder') {
-    return (device.reserved_keys||[]).indexOf(slot) !== -1;
-  }
-  // layout mode: the home button slot is reserved
-  const pg = currentPage();
-  if (!pg) return false;
-  const homeBtn = (pg.buttons||[]).find(function(b){ return b.action==='home'; });
-  return !!(homeBtn && homeBtn.slot===slot);
-}
-
-function resolveIconURL(icon) {
-  if (!icon) return '';
-  if (icon.startsWith('pkg://') || icon.startsWith('http://') || icon.startsWith('https://')) {
-    return '/api/resource?ref=' + encodeURIComponent(icon);
-  }
-  return icon;
-}
-
-// ── Config panel ──────────────────────────────────────────────────────────────
-function initPending() {
-  const pg = currentPage();
-  const existing = pg ? (pg.buttons||[]).find(function(b){ return b.slot===selectedSlot; }) : null;
-  pendingButton = existing
-    ? JSON.parse(JSON.stringify(existing))
-    : {slot: selectedSlot, label:'', action:'', script:'', template:'', target_page:'', icon:'', metadata:{}};
-}
-
-function renderConfigPanel() {
-  const formTab    = document.getElementById('form-tab');
-  const btnActions = document.getElementById('btn-actions');
-  const configTabs = document.getElementById('config-tabs');
-  const panelTitle = document.getElementById('config-panel-title');
-  const monacoTab  = document.getElementById('ctab-monaco');
-
-  if (selectedSlot === null || pendingButton === null) {
-    formTab.innerHTML = '<p style="color:var(--txt3);font-size:.82rem;padding:8px">Click a button to edit it</p>';
-    formTab.style.display = '';
-    document.getElementById('monaco-tab').style.display = 'none';
-    btnActions.style.display = 'none';
-    configTabs.style.display = 'none';
-    panelTitle.textContent = 'Button config';
-    return;
-  }
-
-  const v = pendingButton;
-  const action = v.action || 'script';
-  panelTitle.textContent = 'Slot ' + selectedSlot;
-  btnActions.style.display = 'flex';
-  configTabs.style.display = 'flex';
-
-  const hasScript = !!(v.script);
-  const canEditLua = mode === 'folder' && hasScript;
-  monacoTab.style.display = canEditLua ? '' : 'none';
-
-  // Force back to form tab if lua edit is not available
-  if (!canEditLua && activeConfigTab === 'monaco') {
-    activeConfigTab = 'form';
-  }
-  applySplit(activeConfigTab);
-
-  // page options
-  const pageOpts = (layout.pages||[]).map(function(p){
-    return '<option value="' + esc(p.name) + '"' + (v.target_page===p.name?' selected':'') + '>' + esc(p.name) + '</option>';
-  }).join('');
-
-  // script datalist
-  const scriptOpts = scripts.map(function(s){ return '<option value="' + esc(s) + '">'; }).join('');
-
-  // template datalist
-  const tmplOpts = packages.flatMap(function(p){
-    return (p.templates||[]).map(function(t){
-      return '<option value="' + esc(t.key) + '" label="' + esc(t.label) + '">';
-    });
-  }).join('');
-
-  // metadata schema for the current template
-  let metaSchema = [];
-  if (v.template) {
-    for (const pkg of packages) {
-      const tmpl = (pkg.templates||[]).find(function(t){ return t.key===v.template; });
-      if (tmpl && tmpl.metadata_schema) { metaSchema = tmpl.metadata_schema; break; }
-    }
-  }
-
-  const metaFields = metaSchema.map(function(f){
-    const val = (v.metadata||{})[f.key] || f.default || '';
-    return '<div class="form-row"><label>' + esc(f.label||f.key) +
-      ' <span style="color:var(--blue-l);font-size:.65rem">[' + esc(f.key) + ']</span></label>' +
-      '<input type="text" data-meta-key="' + esc(f.key) + '" value="' + esc(val) + '"' +
-      ' placeholder="' + esc(f.description||'') + '" oninput="updateMeta(this)"></div>';
-  }).join('');
-
-  let scriptSection = '';
-  if (action==='script' || action==='') {
-    const editBtn = (mode==='folder' && v.script)
-      ? '<button class="btn-ghost" style="white-space:nowrap;padding:4px 8px;flex-shrink:0" onclick="openInMonaco()">Edit</button>'
-      : '';
-    scriptSection = '<div class="form-row">' +
-      '<label>Script path</label>' +
-      '<div style="display:flex;gap:4px">' +
-      '<input id="f-script" type="text" list="script-list" value="' + esc(v.script||'') + '" oninput="pendingButton.script=this.value;renderConfigPanel()">' +
-      editBtn + '</div>' +
-      '<datalist id="script-list">' + scriptOpts + '</datalist>' +
-      '</div>' +
-      '<div class="form-row">' +
-      '<label>Template key <span style="color:var(--txt3);font-size:.65rem">(pkg://...)</span></label>' +
-      '<input id="f-template" type="text" list="tmpl-list" value="' + esc(v.template||'') + '" oninput="pendingButton.template=this.value;renderConfigPanel()" placeholder="pkg://riverdeck/home">' +
-      '<datalist id="tmpl-list">' + tmplOpts + '</datalist>' +
-      '</div>' +
-      metaFields;
-  }
-
-  let pageSection = '';
-  if (action==='page') {
-    pageSection = '<div class="form-row">' +
-      '<label>Target page</label>' +
-      '<select id="f-target" onchange="pendingButton.target_page=this.value">' +
-      '<option value="">-- choose --</option>' +
-      pageOpts + '</select></div>';
-  }
-
-  formTab.innerHTML =
-    '<div class="form-row">' +
-    '<label>Label</label>' +
-    '<input id="f-label" type="text" value="' + esc(v.label||'') + '" oninput="pendingButton.label=this.value;liveUpdateGridKey()">' +
-    '</div>' +
-    '<div class="form-row">' +
-    '<label>Action</label>' +
-    '<select id="f-action" onchange="pendingButton.action=this.value;renderConfigPanel()">' +
-    '<option value="script"' + (action==='script'||action===''?' selected':'') + '>Script (Lua)</option>' +
-    '<option value="page"'   + (action==='page'?' selected':'') + '>Go to page</option>' +
-    '<option value="back"'   + (action==='back'?' selected':'') + '>Back</option>' +
-    '<option value="home"'   + (action==='home'?' selected':'') + '>SET / Home</option>' +
-    '<option value="settings"' + (action==='settings'?' selected':'') + '>Settings</option>' +
-    '</select></div>' +
-    scriptSection + pageSection +
-    '<div class="form-row">' +
-    '<label>Icon <span style="color:var(--txt3);font-size:.65rem">(pkg://... or path)</span></label>' +
-    '<input id="f-icon" type="text" value="' + esc(v.icon||'') + '" oninput="pendingButton.icon=this.value;liveUpdateGridKey()" placeholder="pkg://riverdeck/icons/home.png">' +
-    '</div>';
-}
-
-function applySplit(tab) {
-  activeConfigTab = tab;
-  document.getElementById('ctab-form').classList.toggle('active', tab==='form');
-  const ctabMonaco = document.getElementById('ctab-monaco');
-  if (ctabMonaco) ctabMonaco.classList.toggle('active', tab==='monaco');
-  document.getElementById('form-tab').style.display   = tab==='form'   ? '' : 'none';
-  document.getElementById('monaco-tab').style.display = tab==='monaco' ? '' : 'none';
-}
-
-function switchConfigTab(tab) {
-  if (tab==='monaco') {
-    openInMonacoNoSwitch().then(function(){ applySplit('monaco'); });
-  } else {
-    applySplit('form');
-  }
-}
-
-function updateMeta(input) {
-  if (!pendingButton) return;
-  if (!pendingButton.metadata) pendingButton.metadata = {};
-  pendingButton.metadata[input.dataset.metaKey] = input.value;
-}
-
-function liveUpdateGridKey() {
-  if (selectedSlot === null) return;
-  const grid = document.getElementById('deck-grid');
-  const el = grid.children[selectedSlot];
-  if (!el) return;
-  const lbl = el.querySelector('.key-label');
-  if (lbl && pendingButton) lbl.textContent = pendingButton.label||'';
-}
-
-async function openInMonacoNoSwitch() {
-  if (!monacoReady || !pendingButton || !pendingButton.script) return;
-  const path = pendingButton.script;
-  if (path === monacoCurrentPath) return;
-  try {
-    const resp = await fetch('/api/file?path=' + encodeURIComponent(path));
-    if (resp.status === 404) {
-      monacoEditor.setValue('-- new file: ' + path + '\n');
-    } else if (!resp.ok) {
-      throw new Error(await resp.text());
-    } else {
-      monacoEditor.setValue(await resp.text());
-    }
-    monacoCurrentPath = path;
-    monacoEditor.setScrollPosition({scrollTop:0});
-  } catch(e) {
-    toast('Could not open file: '+e, true);
-  }
-}
-
-function openInMonaco() {
-  openInMonacoNoSwitch().then(function(){ applySplit('monaco'); });
-}
-
-async function saveLuaFile() {
-  if (!monacoReady || !monacoCurrentPath) return;
-  try {
-    const resp = await fetch('/api/file?path=' + encodeURIComponent(monacoCurrentPath), {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body: monacoEditor.getValue(),
-    });
-    if (!resp.ok) throw new Error(await resp.text());
-    toast('Lua saved');
-  } catch(e) {
-    toast('Lua save failed: '+e, true); }
-}
-
-// ── Button mutations ──────────────────────────────────────────────────────────
-function applyButton() {
-  if (selectedSlot===null || pendingButton===null) return;
-  const pg = currentPage();
-  if (!pg) return;
-  pg.buttons = pg.buttons||[];
-  let btn = pg.buttons.find(function(b){ return b.slot===selectedSlot; });
-  if (!btn) { btn={slot:selectedSlot}; pg.buttons.push(btn); }
-
-  btn.label       = (document.getElementById('f-label')?.value    ?? pendingButton.label)       || '';
-  btn.action      = (document.getElementById('f-action')?.value   ?? pendingButton.action)      || '';
-  btn.script      = (document.getElementById('f-script')?.value   ?? pendingButton.script)      || '';
-  btn.template    = (document.getElementById('f-template')?.value ?? pendingButton.template)    || '';
-  btn.target_page = (document.getElementById('f-target')?.value   ?? pendingButton.target_page) || '';
-  btn.icon        = (document.getElementById('f-icon')?.value     ?? pendingButton.icon)        || '';
-  btn.metadata    = pendingButton.metadata||{};
-
-  // strip empties
-  ['label','script','template','target_page','icon'].forEach(function(k){ if(!btn[k]) delete btn[k]; });
-  if (!btn.action || btn.action==='script') delete btn.action;
-  if (!btn.metadata || Object.keys(btn.metadata).length===0) delete btn.metadata;
-
-  selectedSlot=null; pendingButton=null;
-  renderAll();
-  toast('Applied');
-}
-
-function deleteButton() {
-  const pg = currentPage();
-  if (!pg) return;
-  pg.buttons = (pg.buttons||[]).filter(function(b){ return b.slot!==selectedSlot; });
-  selectedSlot=null; pendingButton=null;
-  renderAll();
-}
-
-// ── Page management ───────────────────────────────────────────────────────────
-function currentPage() {
-  if (!layout.pages||layout.pages.length===0) return null;
-  if (currentPageIdx>=layout.pages.length) currentPageIdx=0;
-  return layout.pages[currentPageIdx];
-}
-
-function addPage() {
-  const name = prompt('New page name:', 'Page '+(layout.pages.length+1));
-  if (!name) return;
-  layout.pages.push({name:name, buttons:[]});
-  currentPageIdx = layout.pages.length-1;
-  selectedSlot=null; pendingButton=null;
-  renderAll();
-}
-
-function deletePage(i) {
-  if (layout.pages.length===1) { toast('Cannot delete the last page'); return; }
-  if (!confirm('Delete page "' + layout.pages[i].name + '"?')) return;
-  layout.pages.splice(i,1);
-  if (currentPageIdx>=layout.pages.length) currentPageIdx=layout.pages.length-1;
-  selectedSlot=null; pendingButton=null;
-  renderAll();
-}
-
-// ── Package browser ───────────────────────────────────────────────────────────
-function renderPackages() {
-  const container = document.getElementById('pkg-body');
-  const query = (document.getElementById('pkg-search')?.value||'').toLowerCase().trim();
-  container.innerHTML = '';
-
-  let anyShown = false;
-  for (const pkg of packages) {
-    const templates = (pkg.templates||[]).filter(function(t){
-      if (!query) return true;
-      return (t.label||'').toLowerCase().indexOf(query)!==-1 ||
-             (t.description||'').toLowerCase().indexOf(query)!==-1 ||
-             (pkg.id||'').toLowerCase().indexOf(query)!==-1;
-    });
-    if (templates.length===0) continue;
-    anyShown = true;
-
-    const det = document.createElement('details');
-    det.className = 'pkg-group';
-    if (!query) det.open = true;
-    det.innerHTML = '<summary>' + esc(pkg.name||pkg.id) +
-      ' <span style="color:var(--txt3);font-size:.7rem">' + esc(pkg.id) + '</span></summary>';
-
-    const BLANK_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23333'/%3E%3C/svg%3E";
-
-    for (const tmpl of templates) {
-      const row = document.createElement('div');
-      row.className = 'pkg-tmpl';
-      row.title = tmpl.description||tmpl.label||'';
-      const iconSrc = tmpl.icon_url ? esc(tmpl.icon_url) : BLANK_SVG;
-      row.innerHTML =
-        '<img src="' + iconSrc + '" alt="" loading="lazy" onerror="this.src=\'' + BLANK_SVG + '\'">' +
-        '<div class="pkg-tmpl-info">' +
-        '<div class="tmpl-label">' + esc(tmpl.label) + '</div>' +
-        '<div class="tmpl-desc">' + esc(tmpl.description||tmpl.key||'') + '</div>' +
-        '</div>' +
-        '<span class="pkg-badge">PKG</span>';
-
-      (function(p, t){ row.addEventListener('click', function(){ applyTemplate(p, t); }); })(pkg, tmpl);
-      det.appendChild(row);
-    }
-    container.appendChild(det);
-  }
-
-  if (!anyShown) {
-    container.innerHTML = '<p class="pkg-no-results">No templates found</p>';
-  }
-}
-
-async function applyTemplate(pkg, tmpl) {
-  if (selectedSlot === null) {
-    toast('Select a slot first', true);
-    return;
-  }
-  if (isReservedKey(selectedSlot)) {
-    toast('That slot is reserved', true);
-    return;
-  }
-
-  if (mode === 'folder') {
-    try {
-      const resp = await fetch('/api/folder/assign', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({template_key: tmpl.key, slot: selectedSlot}),
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      const result = await resp.json();
-      const scr = await fetch('/api/scripts').then(function(r){ return r.json(); });
-      scripts = scr || [];
-      initPending();
-      pendingButton.script   = result.path||'';
-      pendingButton.template = tmpl.key;
-      pendingButton.label    = tmpl.label||'';
-      if (tmpl.icon_url) pendingButton.icon = 'pkg://' + pkg.id + '/' + (tmpl.icon||'');
-      renderConfigPanel();
-      toast('Template assigned -- click Apply to confirm');
-    } catch(e) { toast('Assign failed: '+e, true); }
-  } else {
-    initPending();
-    pendingButton.template = tmpl.key;
-    pendingButton.label    = tmpl.label||'';
-    if (tmpl.icon_url) pendingButton.icon = 'pkg://' + pkg.id + '/' + (tmpl.icon||'');
-    pendingButton.metadata = {};
-    for (const f of (tmpl.metadata_schema||[])) {
-      if (f.default) pendingButton.metadata[f.key] = f.default;
-    }
-    renderConfigPanel();
-    toast('Template selected -- click Apply to confirm');
-  }
-}
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s||'')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
-}
-
-let toastTimer;
-function toast(msg, err) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = err ? 'show err' : 'show';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function(){ el.className=''; }, err?4000:2000);
-}
-
-// ── Start ─────────────────────────────────────────────────────────────────────
-boot();
-</script>
+	<!-- ── Header ── -->
+	<header>
+		<h1>Riverdeck Editor</h1>
+		<span id="hdr-device"></span>
+		<div id="mode-toggle">
+			<button id="btn-mode-folder" onclick="setMode('folder')">Folder</button>
+			<button id="btn-mode-layout" onclick="setMode('layout')">Layout</button>
+		</div>
+		<div class="spacer"></div>
+		<div id="save-errors"></div>
+		<button class="btn-ghost" onclick="showSettings()">&#9881; Config</button>
+		<button class="btn-ghost" onclick="reloadFromDisk()">Reload</button>
+		<button class="btn-success" onclick="saveLayout()">Save</button>
+	</header>
+
+	<!-- ── Body ── -->
+	<div id="body">
+
+		<!-- ── Left ── -->
+		<div id="left">
+			<!-- page tabs -->
+			<div id="page-tabs">
+				<span id="tab-add" onclick="addPage()">+ Page</span>
+			</div>
+
+			<!-- grid -->
+			<div id="grid-scroll">
+				<div id="deck-grid"></div>
+			</div>
+
+			<!-- button config -->
+			<div id="config-panel">
+				<div id="config-panel-header">
+					<h3 id="config-panel-title">Button config</h3>
+					<div id="config-tabs" style="display:none">
+						<button id="ctab-form" class="active" onclick="switchConfigTab('form')">Properties</button>
+						<button id="ctab-monaco" onclick="switchConfigTab('monaco')" style="display:none">Lua
+							editor</button>
+					</div>
+				</div>
+				<div id="config-body">
+					<div id="form-tab">
+						<p id="form-hint" style="color:var(--txt3);font-size:.82rem;padding:8px">Click a button to edit
+							it</p>
+					</div>
+					<div id="monaco-tab"></div>
+				</div>
+				<div id="btn-actions" style="display:none">
+					<button class="btn-danger" onclick="deleteButton()">Delete</button>
+					<button class="btn-primary" onclick="applyButton()">Apply</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- ── Right: package browser ── -->
+		<div id="pkg-panel">
+			<div id="pkg-panel-header">
+				<h3>Packages</h3>
+			</div>
+			<input id="pkg-search" type="search" placeholder="Filter templates..." oninput="renderPackages()">
+			<div id="pkg-body"></div>
+		</div>
+	</div>
+
+	<!-- ── App settings overlay ── -->
+	<div id="settings-overlay" onclick="if(event.target===this)hideSettings()">
+		<div id="settings-box">
+			<div id="settings-box-header">
+				<h2>App Settings <span style="color:var(--txt3);font-size:.72rem;font-weight:400">(config.yml)</span>
+				</h2>
+				<button class="btn-ghost" style="padding:2px 8px" onclick="hideSettings()">&#x2715;</button>
+			</div>
+			<div id="settings-body">
+				<h4>Application</h4>
+				<div class="form-row"><label>Brightness (%)</label><input id="scfg-brightness" type="number" min="5"
+						max="100" step="5"></div>
+				<div class="form-row"><label>Passive FPS</label><input id="scfg-fps" type="number" min="1" max="60">
+				</div>
+				<div class="form-row"><label>Sleep timeout (seconds &mdash; 0 = never)</label><input id="scfg-timeout"
+						type="number" min="0"></div>
+				<div class="form-row"><label>Debug mode</label><select id="scfg-debug">
+						<option value="false">Off</option>
+						<option value="true">On</option>
+					</select></div>
+				<h4>UI</h4>
+				<div class="form-row"><label>Navigation style</label>
+					<select id="scfg-navstyle">
+						<option value="folder">Folder</option>
+						<option value="layout">Layout</option>
+						<option value="auto">Auto (layout.json if present)</option>
+					</select>
+				</div>
+				<div class="form-row"><label>Show hidden files</label>
+					<select id="scfg-hidden">
+						<option value="false">No</option>
+						<option value="true">Yes</option>
+					</select>
+				</div>
+				<h4>Network</h4>
+				<div class="form-row"><label>HTTP timeout (seconds)</label><input id="scfg-httptmo" type="number"
+						min="1"></div>
+				<div class="form-row"><label>Verify SSL</label>
+					<select id="scfg-ssl">
+						<option value="true">Yes</option>
+						<option value="false">No</option>
+					</select>
+				</div>
+			</div>
+			<div id="settings-footer">
+				<span style="font-size:.72rem;color:var(--txt3);align-self:center;flex:1">Restart Riverdeck to apply
+					changes.</span>
+				<button class="btn-ghost" onclick="hideSettings()">Cancel</button>
+				<button class="btn-success" onclick="saveSettings()">Save</button>
+			</div>
+		</div>
+	</div>
+
+	<div id="toast"></div>
+
+	<!-- Monaco loader -->
+	<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs/loader.js"></script>
+
+	<script>
+		'use strict';
+
+		// ── State ─────────────────────────────────────────────────────────────────────
+		let device = { cols: 5, rows: 3, keys: 15, model_name: '', reserved_keys: [] };
+		let layout = { pages: [] };
+		let packages = [];
+		let scripts = [];
+		let mode = 'folder';
+
+		let currentPageIdx = 0;
+		let selectedSlot = null;
+		let pendingButton = null;
+
+		// Monaco
+		let monacoReady = false;
+		let monacoEditor = null;
+		let monacoCurrentPath = null;
+		let activeConfigTab = 'form';
+
+		// ── Monaco init ───────────────────────────────────────────────────────────────
+		require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52/min/vs' } });
+		require(['vs/editor/editor.main'], function () {
+			monacoReady = true;
+			monacoEditor = monaco.editor.create(document.getElementById('monaco-tab'), {
+				value: '-- select a script button and click "Lua editor" to edit',
+				language: 'lua',
+				theme: 'vs-dark',
+				automaticLayout: true,
+				minimap: { enabled: false },
+				fontSize: 13,
+				scrollBeyondLastLine: false,
+				wordWrap: 'on',
+			});
+			monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveLuaFile());
+		});
+
+		// ── Boot ──────────────────────────────────────────────────────────────────────
+		async function boot() {
+			try {
+				const [dev, lay, pkgs, scr, modeRes] = await Promise.all([
+					fetch('/api/device').then(r => r.json()),
+					fetch('/api/layout').then(r => r.json()),
+					fetch('/api/packages').then(r => r.json()),
+					fetch('/api/scripts').then(r => r.json()),
+					fetch('/api/mode').then(r => r.json()),
+				]);
+				device = dev;
+				layout = lay || { pages: [] };
+				packages = pkgs || [];
+				scripts = scr || [];
+				mode = modeRes.style || 'folder';
+
+				document.getElementById('hdr-device').textContent =
+					device.model_name + ' (' + device.cols + 'x' + device.rows + ')';
+				updateModeToggle();
+				renderAll();
+			} catch (e) {
+				toast('Failed to load: ' + e, true);
+			}
+		}
+
+		async function reloadFromDisk() {
+			try {
+				const [lay, scr] = await Promise.all([
+					fetch('/api/layout').then(r => r.json()),
+					fetch('/api/scripts').then(r => r.json()),
+				]);
+				layout = lay || { pages: [] }; scripts = scr || [];
+				selectedSlot = null; pendingButton = null;
+				renderAll();
+				toast('Reloaded from disk');
+			} catch (e) {
+				toast('Reload failed: ' + e, true);
+			}
+		}
+
+		// ── Mode ──────────────────────────────────────────────────────────────────────
+		function updateModeToggle() {
+			document.getElementById('btn-mode-folder').classList.toggle('active', mode === 'folder');
+			document.getElementById('btn-mode-layout').classList.toggle('active', mode === 'layout');
+		}
+
+		async function setMode(newMode) {
+			if (newMode === mode) return;
+			try {
+				const resp = await fetch('/api/mode', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ style: newMode }),
+				});
+				if (!resp.ok) throw new Error(await resp.text());
+				mode = newMode;
+				selectedSlot = null; pendingButton = null;
+				updateModeToggle();
+				renderAll();
+				toast('Mode: ' + newMode);
+			} catch (e) { toast('Mode change failed: ' + e, true); }
+		}
+
+		// ── Layout save/load ──────────────────────────────────────────────────────────
+		async function saveLayout() {
+			hideSaveErrors();
+			try {
+				const resp = await fetch('/api/layout', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(layout),
+				});
+				if (resp.status === 400) {
+					const body = await resp.json();
+					showSaveErrors(body.errors || ['Unknown validation error']);
+					return;
+				}
+				if (!resp.ok) throw new Error(await resp.text());
+				toast('Saved');
+				renderPageTabs();
+			} catch (e) { toast('Save failed: ' + e, true); }
+		}
+
+		function showSaveErrors(errs) {
+			const el = document.getElementById('save-errors');
+			el.textContent = errs.join('\n');
+			el.style.display = 'block';
+		}
+		function hideSaveErrors() {
+			document.getElementById('save-errors').style.display = 'none';
+		}
+
+		// ── Render coordination ───────────────────────────────────────────────────────
+		function renderAll() {
+			renderPageTabs();
+			renderGrid();
+			renderConfigPanel();
+			renderPackages();
+		}
+
+		// ── Page tabs ─────────────────────────────────────────────────────────────────
+		function renderPageTabs() {
+			const container = document.getElementById('page-tabs');
+			const addBtn = document.getElementById('tab-add');
+			// Remove old tabs
+			Array.from(container.querySelectorAll('.page-tab')).forEach(el => el.remove());
+
+			(layout.pages || []).forEach((page, i) => {
+				const tab = document.createElement('div');
+				tab.className = 'page-tab' + (i === currentPageIdx ? ' active' : '');
+				const hasHome = pageHasHome(page);
+				const warnHTML = (!hasHome && mode === 'layout')
+					? '<span class="tab-err" title="Missing SET/HOME button">!</span>'
+					: '';
+				const delHTML = '<span class="tab-del" title="Delete page">x</span>';
+				tab.innerHTML = '<span class="tab-name">' + esc(page.name || 'Page ' + (i + 1)) + '</span>' + warnHTML + delHTML;
+				tab.querySelector('.tab-del').addEventListener('click', function (e) {
+					e.stopPropagation();
+					deletePage(i);
+				});
+				tab.addEventListener('click', function () { currentPageIdx = i; selectedSlot = null; pendingButton = null; renderAll(); });
+				container.insertBefore(tab, addBtn);
+			});
+		}
+
+		function pageHasHome(page) {
+			return (page.buttons || []).some(function (b) { return b.action === 'home'; });
+		}
+
+		// ── Grid ──────────────────────────────────────────────────────────────────────
+		function renderGrid() {
+			const grid = document.getElementById('deck-grid');
+			grid.style.gridTemplateColumns = 'repeat(' + device.cols + ', 82px)';
+			grid.innerHTML = '';
+			const pg = currentPage();
+			const btnMap = {};
+			if (pg) (pg.buttons || []).forEach(function (b) { btnMap[b.slot] = b; });
+
+			for (let i = 0; i < device.keys; i++) {
+				const btn = btnMap[i];
+				const reserved = isReservedKey(i);
+				const el = document.createElement('div');
+				el.className = 'key-cell';
+				if (reserved) el.classList.add('reserved');
+				if (i === selectedSlot) el.classList.add('selected');
+
+				if (btn && !reserved) {
+					const act = btn.action || 'script';
+					if (act === 'home') el.classList.add('action-home');
+					else if (act === 'settings') el.classList.add('action-settings');
+					else if (act === 'page') el.classList.add('has-page');
+					else if (act === 'back') el.classList.add('has-back');
+					else if (btn.script || btn.template) el.classList.add('has-script');
+				}
+
+				let inner = '<span class="slot-num">' + i + '</span>';
+				if (reserved) inner += '<span class="lock-icon">&#x1F512;</span>';
+
+				if (btn) {
+					if (btn.icon) {
+						const iconURL = resolveIconURL(btn.icon);
+						inner += '<img class="key-icon" src="' + esc(iconURL) + '" loading="lazy" onerror="this.style.display=\'none\'">';
+					}
+					inner += '<span class="key-label">' + esc(btn.label || '') + '</span>';
+					if (btn.action && btn.action !== 'script') {
+						inner += '<span class="badge">' + esc(btn.action) + '</span>';
+					}
+				}
+				el.innerHTML = inner;
+
+				if (!reserved) {
+					(function (slot) {
+						el.addEventListener('click', function () { selectedSlot = slot; initPending(); renderGrid(); renderConfigPanel(); });
+					})(i);
+				}
+				grid.appendChild(el);
+			}
+		}
+
+		function isReservedKey(slot) {
+			if (mode === 'folder') {
+				return (device.reserved_keys || []).indexOf(slot) !== -1;
+			}
+			// layout mode: the home button slot is reserved
+			const pg = currentPage();
+			if (!pg) return false;
+			const homeBtn = (pg.buttons || []).find(function (b) { return b.action === 'home'; });
+			return !!(homeBtn && homeBtn.slot === slot);
+		}
+
+		function resolveIconURL(icon) {
+			if (!icon) return '';
+			if (icon.startsWith('pkg://') || icon.startsWith('http://') || icon.startsWith('https://')) {
+				return '/api/resource?ref=' + encodeURIComponent(icon);
+			}
+			return icon;
+		}
+
+		// ── Config panel ──────────────────────────────────────────────────────────────
+		function initPending() {
+			const pg = currentPage();
+			const existing = pg ? (pg.buttons || []).find(function (b) { return b.slot === selectedSlot; }) : null;
+			pendingButton = existing
+				? JSON.parse(JSON.stringify(existing))
+				: { slot: selectedSlot, label: '', action: '', script: '', template: '', target_page: '', icon: '', metadata: {} };
+		}
+
+		function renderConfigPanel() {
+			const formTab = document.getElementById('form-tab');
+			const btnActions = document.getElementById('btn-actions');
+			const configTabs = document.getElementById('config-tabs');
+			const panelTitle = document.getElementById('config-panel-title');
+			const monacoTab = document.getElementById('ctab-monaco');
+
+			if (selectedSlot === null || pendingButton === null) {
+				formTab.innerHTML = '<p style="color:var(--txt3);font-size:.82rem;padding:8px">Click a button to edit it</p>';
+				formTab.style.display = '';
+				document.getElementById('monaco-tab').style.display = 'none';
+				btnActions.style.display = 'none';
+				configTabs.style.display = 'none';
+				panelTitle.textContent = 'Button config';
+				return;
+			}
+
+			const v = pendingButton;
+			const action = v.action || 'script';
+			panelTitle.textContent = 'Slot ' + selectedSlot;
+			btnActions.style.display = 'flex';
+			configTabs.style.display = 'flex';
+
+			const hasScript = !!(v.script);
+			const canEditLua = mode === 'folder' && hasScript;
+			monacoTab.style.display = canEditLua ? '' : 'none';
+
+			// Force back to form tab if lua edit is not available
+			if (!canEditLua && activeConfigTab === 'monaco') {
+				activeConfigTab = 'form';
+			}
+			applySplit(activeConfigTab);
+
+			// page options
+			const pageOpts = (layout.pages || []).map(function (p) {
+				return '<option value="' + esc(p.name) + '"' + (v.target_page === p.name ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+			}).join('');
+
+			// script datalist
+			const scriptOpts = scripts.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('');
+
+			// template datalist
+			const tmplOpts = packages.flatMap(function (p) {
+				return (p.templates || []).map(function (t) {
+					return '<option value="' + esc(t.key) + '" label="' + esc(t.label) + '">';
+				});
+			}).join('');
+
+			// metadata schema for the current template
+			let metaSchema = [];
+			if (v.template) {
+				for (const pkg of packages) {
+					const tmpl = (pkg.templates || []).find(function (t) { return t.key === v.template; });
+					if (tmpl && tmpl.metadata_schema) { metaSchema = tmpl.metadata_schema; break; }
+				}
+			}
+
+			const metaFields = metaSchema.map(function (f) {
+				const val = (v.metadata || {})[f.key] || f.default || '';
+				return '<div class="form-row"><label>' + esc(f.label || f.key) +
+					' <span style="color:var(--blue-l);font-size:.65rem">[' + esc(f.key) + ']</span></label>' +
+					'<input type="text" data-meta-key="' + esc(f.key) + '" value="' + esc(val) + '"' +
+					' placeholder="' + esc(f.description || '') + '" oninput="updateMeta(this)"></div>';
+			}).join('');
+
+			let scriptSection = '';
+			if (action === 'script' || action === '') {
+				const editBtn = (mode === 'folder' && v.script)
+					? '<button class="btn-ghost" style="white-space:nowrap;padding:4px 8px;flex-shrink:0" onclick="openInMonaco()">Edit</button>'
+					: '';
+				scriptSection = '<div class="form-row">' +
+					'<label>Script path</label>' +
+					'<div style="display:flex;gap:4px">' +
+					'<input id="f-script" type="text" list="script-list" value="' + esc(v.script || '') + '" oninput="pendingButton.script=this.value;renderConfigPanel()">' +
+					editBtn + '</div>' +
+					'<datalist id="script-list">' + scriptOpts + '</datalist>' +
+					'</div>' +
+					'<div class="form-row">' +
+					'<label>Template key <span style="color:var(--txt3);font-size:.65rem">(pkg://...)</span></label>' +
+					'<input id="f-template" type="text" list="tmpl-list" value="' + esc(v.template || '') + '" oninput="pendingButton.template=this.value;renderConfigPanel()" placeholder="pkg://riverdeck/home">' +
+					'<datalist id="tmpl-list">' + tmplOpts + '</datalist>' +
+					'</div>' +
+					metaFields;
+			}
+
+			let pageSection = '';
+			if (action === 'page') {
+				pageSection = '<div class="form-row">' +
+					'<label>Target page</label>' +
+					'<select id="f-target" onchange="pendingButton.target_page=this.value">' +
+					'<option value="">-- choose --</option>' +
+					pageOpts + '</select></div>';
+			}
+
+			formTab.innerHTML =
+				'<div class="form-row">' +
+				'<label>Label</label>' +
+				'<input id="f-label" type="text" value="' + esc(v.label || '') + '" oninput="pendingButton.label=this.value;liveUpdateGridKey()">' +
+				'</div>' +
+				'<div class="form-row">' +
+				'<label>Action</label>' +
+				'<select id="f-action" onchange="pendingButton.action=this.value;renderConfigPanel()">' +
+				'<option value="script"' + (action === 'script' || action === '' ? ' selected' : '') + '>Script (Lua)</option>' +
+				'<option value="page"' + (action === 'page' ? ' selected' : '') + '>Go to page</option>' +
+				'<option value="back"' + (action === 'back' ? ' selected' : '') + '>Back</option>' +
+				'<option value="home"' + (action === 'home' ? ' selected' : '') + '>SET / Home</option>' +
+				'<option value="settings"' + (action === 'settings' ? ' selected' : '') + '>Settings</option>' +
+				'</select></div>' +
+				scriptSection + pageSection +
+				'<div class="form-row">' +
+				'<label>Icon <span style="color:var(--txt3);font-size:.65rem">(pkg://... or path)</span></label>' +
+				'<input id="f-icon" type="text" value="' + esc(v.icon || '') + '" oninput="pendingButton.icon=this.value;liveUpdateGridKey()" placeholder="pkg://riverdeck/icons/home.png">' +
+				'</div>';
+		}
+
+		function applySplit(tab) {
+			activeConfigTab = tab;
+			document.getElementById('ctab-form').classList.toggle('active', tab === 'form');
+			const ctabMonaco = document.getElementById('ctab-monaco');
+			if (ctabMonaco) ctabMonaco.classList.toggle('active', tab === 'monaco');
+			document.getElementById('form-tab').style.display = tab === 'form' ? '' : 'none';
+			document.getElementById('monaco-tab').style.display = tab === 'monaco' ? '' : 'none';
+		}
+
+		function switchConfigTab(tab) {
+			if (tab === 'monaco') {
+				openInMonacoNoSwitch().then(function () { applySplit('monaco'); });
+			} else {
+				applySplit('form');
+			}
+		}
+
+		function updateMeta(input) {
+			if (!pendingButton) return;
+			if (!pendingButton.metadata) pendingButton.metadata = {};
+			pendingButton.metadata[input.dataset.metaKey] = input.value;
+		}
+
+		function liveUpdateGridKey() {
+			if (selectedSlot === null) return;
+			const grid = document.getElementById('deck-grid');
+			const el = grid.children[selectedSlot];
+			if (!el) return;
+			const lbl = el.querySelector('.key-label');
+			if (lbl && pendingButton) lbl.textContent = pendingButton.label || '';
+		}
+
+		async function openInMonacoNoSwitch() {
+			if (!monacoReady || !pendingButton || !pendingButton.script) return;
+			const path = pendingButton.script;
+			if (path === monacoCurrentPath) return;
+			try {
+				const resp = await fetch('/api/file?path=' + encodeURIComponent(path));
+				if (resp.status === 404) {
+					monacoEditor.setValue('-- new file: ' + path + '\n');
+				} else if (!resp.ok) {
+					throw new Error(await resp.text());
+				} else {
+					monacoEditor.setValue(await resp.text());
+				}
+				monacoCurrentPath = path;
+				monacoEditor.setScrollPosition({ scrollTop: 0 });
+			} catch (e) {
+				toast('Could not open file: ' + e, true);
+			}
+		}
+
+		function openInMonaco() {
+			openInMonacoNoSwitch().then(function () { applySplit('monaco'); });
+		}
+
+		async function saveLuaFile() {
+			if (!monacoReady || !monacoCurrentPath) return;
+			try {
+				const resp = await fetch('/api/file?path=' + encodeURIComponent(monacoCurrentPath), {
+					method: 'POST',
+					headers: { 'Content-Type': 'text/plain' },
+					body: monacoEditor.getValue(),
+				});
+				if (!resp.ok) throw new Error(await resp.text());
+				toast('Lua saved');
+			} catch (e) {
+				toast('Lua save failed: ' + e, true);
+			}
+		}
+
+		// ── Button mutations ──────────────────────────────────────────────────────────
+		function applyButton() {
+			if (selectedSlot === null || pendingButton === null) return;
+			const pg = currentPage();
+			if (!pg) return;
+			pg.buttons = pg.buttons || [];
+			let btn = pg.buttons.find(function (b) { return b.slot === selectedSlot; });
+			if (!btn) { btn = { slot: selectedSlot }; pg.buttons.push(btn); }
+
+			btn.label = (document.getElementById('f-label')?.value ?? pendingButton.label) || '';
+			btn.action = (document.getElementById('f-action')?.value ?? pendingButton.action) || '';
+			btn.script = (document.getElementById('f-script')?.value ?? pendingButton.script) || '';
+			btn.template = (document.getElementById('f-template')?.value ?? pendingButton.template) || '';
+			btn.target_page = (document.getElementById('f-target')?.value ?? pendingButton.target_page) || '';
+			btn.icon = (document.getElementById('f-icon')?.value ?? pendingButton.icon) || '';
+			btn.metadata = pendingButton.metadata || {};
+
+			// strip empties
+			['label', 'script', 'template', 'target_page', 'icon'].forEach(function (k) { if (!btn[k]) delete btn[k]; });
+			if (!btn.action || btn.action === 'script') delete btn.action;
+			if (!btn.metadata || Object.keys(btn.metadata).length === 0) delete btn.metadata;
+
+			selectedSlot = null; pendingButton = null;
+			renderAll();
+			toast('Applied');
+		}
+
+		function deleteButton() {
+			const pg = currentPage();
+			if (!pg) return;
+			pg.buttons = (pg.buttons || []).filter(function (b) { return b.slot !== selectedSlot; });
+			selectedSlot = null; pendingButton = null;
+			renderAll();
+		}
+
+		// ── Page management ───────────────────────────────────────────────────────────
+		function currentPage() {
+			if (!layout.pages || layout.pages.length === 0) return null;
+			if (currentPageIdx >= layout.pages.length) currentPageIdx = 0;
+			return layout.pages[currentPageIdx];
+		}
+
+		function addPage() {
+			const name = prompt('New page name:', 'Page ' + (layout.pages.length + 1));
+			if (!name) return;
+			layout.pages.push({ name: name, buttons: [] });
+			currentPageIdx = layout.pages.length - 1;
+			selectedSlot = null; pendingButton = null;
+			renderAll();
+		}
+
+		function deletePage(i) {
+			if (layout.pages.length === 1) { toast('Cannot delete the last page'); return; }
+			if (!confirm('Delete page "' + layout.pages[i].name + '"?')) return;
+			layout.pages.splice(i, 1);
+			if (currentPageIdx >= layout.pages.length) currentPageIdx = layout.pages.length - 1;
+			selectedSlot = null; pendingButton = null;
+			renderAll();
+		}
+
+		// ── Package browser ───────────────────────────────────────────────────────────
+		function renderPackages() {
+			const container = document.getElementById('pkg-body');
+			const query = (document.getElementById('pkg-search')?.value || '').toLowerCase().trim();
+			container.innerHTML = '';
+
+			let anyShown = false;
+			for (const pkg of packages) {
+				const templates = (pkg.templates || []).filter(function (t) {
+					if (!query) return true;
+					return (t.label || '').toLowerCase().indexOf(query) !== -1 ||
+						(t.description || '').toLowerCase().indexOf(query) !== -1 ||
+						(pkg.id || '').toLowerCase().indexOf(query) !== -1;
+				});
+				if (templates.length === 0) continue;
+				anyShown = true;
+
+				const det = document.createElement('details');
+				det.className = 'pkg-group';
+				if (!query) det.open = true;
+				det.innerHTML = '<summary>' + esc(pkg.name || pkg.id) +
+					' <span style="color:var(--txt3);font-size:.7rem">' + esc(pkg.id) + '</span></summary>';
+
+				const BLANK_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23333'/%3E%3C/svg%3E";
+
+				for (const tmpl of templates) {
+					const row = document.createElement('div');
+					row.className = 'pkg-tmpl';
+					row.title = tmpl.description || tmpl.label || '';
+					const iconSrc = tmpl.icon_url ? esc(tmpl.icon_url) : BLANK_SVG;
+					row.innerHTML =
+						'<img src="' + iconSrc + '" alt="" loading="lazy" onerror="this.src=\'' + BLANK_SVG + '\'">' +
+						'<div class="pkg-tmpl-info">' +
+						'<div class="tmpl-label">' + esc(tmpl.label) + '</div>' +
+						'<div class="tmpl-desc">' + esc(tmpl.description || tmpl.key || '') + '</div>' +
+						'</div>' +
+						'<span class="pkg-badge">PKG</span>';
+
+					(function (p, t) { row.addEventListener('click', function () { applyTemplate(p, t); }); })(pkg, tmpl);
+					det.appendChild(row);
+				}
+				container.appendChild(det);
+			}
+
+			if (!anyShown) {
+				container.innerHTML = '<p class="pkg-no-results">No templates found</p>';
+			}
+		}
+
+		async function applyTemplate(pkg, tmpl) {
+			if (selectedSlot === null) {
+				toast('Select a slot first', true);
+				return;
+			}
+			if (isReservedKey(selectedSlot)) {
+				toast('That slot is reserved', true);
+				return;
+			}
+
+			if (mode === 'folder') {
+				try {
+					const resp = await fetch('/api/folder/assign', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ template_key: tmpl.key, slot: selectedSlot }),
+					});
+					if (!resp.ok) throw new Error(await resp.text());
+					const result = await resp.json();
+					const scr = await fetch('/api/scripts').then(function (r) { return r.json(); });
+					scripts = scr || [];
+					initPending();
+					pendingButton.script = result.path || '';
+					pendingButton.template = tmpl.key;
+					pendingButton.label = tmpl.label || '';
+					if (tmpl.icon_url) pendingButton.icon = 'pkg://' + pkg.id + '/' + (tmpl.icon || '');
+					renderConfigPanel();
+					toast('Template assigned -- click Apply to confirm');
+				} catch (e) { toast('Assign failed: ' + e, true); }
+			} else {
+				initPending();
+				pendingButton.template = tmpl.key;
+				pendingButton.label = tmpl.label || '';
+				if (tmpl.icon_url) pendingButton.icon = 'pkg://' + pkg.id + '/' + (tmpl.icon || '');
+				pendingButton.metadata = {};
+				for (const f of (tmpl.metadata_schema || [])) {
+					if (f.default) pendingButton.metadata[f.key] = f.default;
+				}
+				renderConfigPanel();
+				toast('Template selected -- click Apply to confirm');
+			}
+		}
+
+		// ── Utilities ─────────────────────────────────────────────────────────────────
+		function esc(s) {
+			return String(s || '')
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#39;');
+		}
+
+		let toastTimer;
+		function toast(msg, err) {
+			const el = document.getElementById('toast');
+			el.textContent = msg;
+			el.className = err ? 'show err' : 'show';
+			clearTimeout(toastTimer);
+			toastTimer = setTimeout(function () { el.className = ''; }, err ? 4000 : 2000);
+		}
+
+		// ── App settings ──────────────────────────────────────────────────────────────
+		let appCfgCache = {};
+
+		function showSettings() {
+			loadAppConfig().then(function () {
+				document.getElementById('settings-overlay').classList.add('open');
+			});
+		}
+
+		function hideSettings() {
+			document.getElementById('settings-overlay').classList.remove('open');
+		}
+
+		async function loadAppConfig() {
+			try {
+				const resp = await fetch('/api/app-config');
+				if (!resp.ok) throw new Error('HTTP ' + resp.status);
+				appCfgCache = await resp.json();
+				const app = appCfgCache.application || {};
+				const ui = appCfgCache.ui || {};
+				const net = appCfgCache.network || {};
+				document.getElementById('scfg-brightness').value = (app.brightness !== undefined) ? app.brightness : 75;
+				document.getElementById('scfg-fps').value = (app.passive_fps !== undefined) ? app.passive_fps : 30;
+				document.getElementById('scfg-timeout').value = (app.timeout !== undefined) ? app.timeout : 0;
+				document.getElementById('scfg-debug').value = (app.debug === true) ? 'true' : 'false';
+				document.getElementById('scfg-navstyle').value = ui.navigation_style || 'folder';
+				document.getElementById('scfg-hidden').value = (ui.show_hidden_files === true) ? 'true' : 'false';
+				document.getElementById('scfg-httptmo').value = (net.http_timeout !== undefined) ? net.http_timeout : 10;
+				document.getElementById('scfg-ssl').value = (net.verify_ssl === false) ? 'false' : 'true';
+			} catch (e) {
+				toast('Failed to load config: ' + e, true);
+			}
+		}
+
+		async function saveSettings() {
+			const patch = {
+				application: {
+					brightness: parseInt(document.getElementById('scfg-brightness').value) || 75,
+					passive_fps: parseInt(document.getElementById('scfg-fps').value) || 30,
+					timeout: parseInt(document.getElementById('scfg-timeout').value) || 0,
+					debug: document.getElementById('scfg-debug').value === 'true',
+				},
+				ui: {
+					navigation_style: document.getElementById('scfg-navstyle').value,
+					show_hidden_files: document.getElementById('scfg-hidden').value === 'true',
+				},
+				network: {
+					http_timeout: parseInt(document.getElementById('scfg-httptmo').value) || 10,
+					verify_ssl: document.getElementById('scfg-ssl').value === 'true',
+				},
+			};
+			try {
+				const resp = await fetch('/api/app-config', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(patch),
+				});
+				if (!resp.ok) throw new Error(await resp.text());
+				hideSettings();
+				toast('Config saved \u2014 restart Riverdeck to apply changes');
+			} catch (e) {
+				toast('Save failed: ' + e, true);
+			}
+		}
+
+		// ── Start ─────────────────────────────────────────────────────────────────────
+		boot();
+	</script>
 </body>
+
 </html>

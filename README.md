@@ -13,8 +13,8 @@ A programmable interface for Elgato Stream Deck devices. This Go application all
 - **Package System**: Modular script packages with templates, shared libraries, and daemon scripts
 - **Settings Overlay**: In-device settings menu accessible from any page
 - **Display Sleep**: Configurable timeout with activity-based wake
-- **Layout Mode** *(experimental — not finished)*: Declarative, JSON-based page navigation as an alternative to folder browsing. See [Layout Mode](#layout-mode-experimental) below.
-- **Editors** *(experimental — not finished)*: Visual layout editor and HTTP API for designing button layouts. See [Editors](#editors-experimental) below.
+- **Layout Mode** *(experimental -- not finished)*: Declarative, JSON-based page navigation as an alternative to folder browsing. See [Layout Mode](#layout-mode-experimental) below.
+- **Editors** *(experimental -- not finished)*: Visual layout editor and HTTP API for designing button layouts. See [Editors](#editors-experimental) below.
 
 ## Usage
 
@@ -105,14 +105,14 @@ Example `layout.json`:
 
 Two editor components are provided for working with layout mode:
 
-- **`riverdeck-wails`** — A standalone desktop GUI (built with [Wails v2](https://wails.io/)) for visually designing button layouts. Build and run it with:
+- **`riverdeck-wails`** -- A standalone desktop GUI (built with [Wails v2](https://wails.io/)) for visually designing button layouts. Build and run it with:
 
   ```bash
   go build ./cmd/riverdeck-wails
   ./riverdeck-wails
   ```
 
-- **Editor HTTP API** — An embedded HTTP server (`pkg/editorserver`) that serves the editor frontend and exposes endpoints for reading and writing `layout.json` and script files. This API is used internally by `riverdeck-wails`.
+- **Editor HTTP API** -- An embedded HTTP server (`pkg/editorserver`) that serves the editor frontend and exposes endpoints for reading and writing `layout.json` and script files. This API is used internally by `riverdeck-wails`.
 
 ## Requirements
 
@@ -136,7 +136,7 @@ The repository is organized into commands and packages:
 
 | Command | Description |
 |---------|-------------|
-| `riverdeck` | Main application — device communication, scripting, and systray |
+| `riverdeck` | Main application -- device communication, scripting, and systray |
 | `riverdeck-wails` | Layout editor GUI *(experimental)* |
 | `riverdeck-debug-prober` | Device inspection and feature report debugging utility |
 | `riverdeck-simulator` | Software simulator for testing without hardware |

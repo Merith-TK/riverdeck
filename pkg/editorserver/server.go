@@ -22,6 +22,7 @@ import (
 	"github.com/merith-tk/riverdeck/pkg/layout"
 	"github.com/merith-tk/riverdeck/pkg/resolver"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
+	"gopkg.in/yaml.v3"
 )
 
 // DeviceDimensions describes the physical Stream Deck geometry exposed over
@@ -113,6 +114,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/resource", s.handleResource)
 	mux.HandleFunc("/api/icons/", s.handleIcons)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/app-config", s.handleAppConfig)
 	mux.HandleFunc("/api/lua/new", s.handleLuaNew)
 	mux.HandleFunc("/api/lua/templates", s.handleLuaTemplates)
 }
@@ -131,10 +133,6 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, lay)
 
 	case http.MethodPost:
-		if !s.isSameOrigin(r) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		var incoming layout.Layout
 		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -169,6 +167,19 @@ func (s *Server) handlePackages(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Dynamically re-scan packages from disk on every request so the editor
+	// always reflects the current set of installed packages.  The result is
+	// stored back into s.cfg.Packages so that handleFolderAssign,
+	// handleResource, and handleIcons stay in sync.
+	freshPkgs, scanErr := scripting.ScanPackages(s.cfg.ConfigDir)
+	if scanErr != nil {
+		log.Printf("[editorserver] package scan error: %v", scanErr)
+	}
+	s.mu.Lock()
+	s.cfg.Packages = freshPkgs
+	s.mu.Unlock()
+
 	s.mu.RLock()
 	pkgs := s.cfg.Packages
 	s.mu.RUnlock()
@@ -281,10 +292,6 @@ func (s *Server) handleMode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"style": style})
 
 	case http.MethodPost:
-		if !s.isSameOrigin(r) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		var req struct {
 			Style string `json:"style"`
 		}
@@ -348,10 +355,6 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(data)
 
 	case http.MethodPost:
-		if !s.isSameOrigin(r) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "read body error: "+err.Error(), http.StatusBadRequest)
@@ -381,10 +384,6 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFolderAssign(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.isSameOrigin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -523,6 +522,158 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, resolved)
 }
 
+// handleAppConfig provides read/write access to the application config.yml.
+//
+// GET  /api/app-config   -> returns config.yml contents as JSON
+// POST /api/app-config   <- JSON object; merged into existing config.yml and saved
+//
+// The file is round-tripped through a yaml.Node tree so that key order and
+// indentation from the original file are preserved on every save.
+func (s *Server) handleAppConfig(w http.ResponseWriter, r *http.Request) {
+	cfgPath := filepath.Join(s.cfg.ConfigDir, "config.yml")
+
+	switch r.Method {
+	case http.MethodGet:
+		data, err := os.ReadFile(cfgPath)
+		if os.IsNotExist(err) {
+			writeJSON(w, map[string]interface{}{})
+			return
+		}
+		if err != nil {
+			http.Error(w, "read error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		var cfg map[string]interface{}
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			http.Error(w, "parse error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if cfg == nil {
+			cfg = map[string]interface{}{}
+		}
+		writeJSON(w, cfg)
+
+	case http.MethodPost:
+		var patch map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Load the existing file into a yaml.Node tree so we can patch
+		// individual keys without disturbing the original ordering or style.
+		var docNode yaml.Node
+		if data, err := os.ReadFile(cfgPath); err == nil && len(data) > 0 {
+			_ = yaml.Unmarshal(data, &docNode)
+		}
+		// Ensure we have a DocumentNode wrapping a MappingNode.
+		if docNode.Kind != yaml.DocumentNode || len(docNode.Content) == 0 {
+			docNode = yaml.Node{
+				Kind: yaml.DocumentNode,
+				Content: []*yaml.Node{
+					{Kind: yaml.MappingNode, Tag: "!!map"},
+				},
+			}
+		}
+		mapping := docNode.Content[0]
+		if mapping.Kind != yaml.MappingNode {
+			mapping = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			docNode.Content[0] = mapping
+		}
+
+		// Merge patch: for each section, update only the keys present in the
+		// patch so original keys and ordering are preserved.
+		for sectionKey, sectionVal := range patch {
+			sectionMap, isMap := sectionVal.(map[string]interface{})
+			if !isMap {
+				// Scalar top-level key.
+				yamlSetKey(mapping, sectionKey, sectionVal)
+				continue
+			}
+			// Find the existing section node.
+			secNode := yamlFindValue(mapping, sectionKey)
+			if secNode == nil || secNode.Kind != yaml.MappingNode {
+				// Section absent or not a map: set it wholesale.
+				yamlSetKey(mapping, sectionKey, sectionMap)
+				continue
+			}
+			// Section exists: update only the keys that appear in the patch.
+			for k, v := range sectionMap {
+				yamlSetKey(secNode, k, v)
+			}
+		}
+
+		// Write back preserving 2-space indentation.
+		// Encode the mapping node directly (not the document wrapper) to avoid
+		// emitting a leading "---" document marker.
+		f, err := os.Create(cfgPath)
+		if err != nil {
+			http.Error(w, "create error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		enc := yaml.NewEncoder(f)
+		enc.SetIndent(2)
+		encErr := enc.Encode(mapping)
+		closeErr := enc.Close()
+		f.Close()
+		if encErr != nil {
+			http.Error(w, "encode error: "+encErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		if closeErr != nil {
+			http.Error(w, "close error: "+closeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// yamlFindValue returns the value node for key inside a YAML mapping node,
+// or nil if the key is not present.
+func yamlFindValue(mapping *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// yamlSetKey sets key to val inside a YAML mapping node.  If the key already
+// exists the value node is replaced in-place so the original order is kept.
+// If the key is absent the key+value pair is appended.
+func yamlSetKey(mapping *yaml.Node, key string, val interface{}) {
+	// Encode val to YAML bytes then parse into a Node.
+	raw, err := yaml.Marshal(val)
+	if err != nil {
+		return
+	}
+	var newDoc yaml.Node
+	if err := yaml.Unmarshal(raw, &newDoc); err != nil {
+		return
+	}
+	if newDoc.Kind != yaml.DocumentNode || len(newDoc.Content) == 0 {
+		return
+	}
+	newValNode := newDoc.Content[0]
+
+	// Replace in-place if the key already exists.
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content[i+1] = newValNode
+			return
+		}
+	}
+	// Key not found — append.
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
+		newValNode,
+	)
+}
+
 // handleConfig provides read/write access to per-script configuration.
 //
 // GET  /api/config?path=relative/script.lua
@@ -560,10 +711,6 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, cfg)
 
 	case http.MethodPost:
-		if !s.isSameOrigin(r) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		var cfg scripting.ScriptConfig
 		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -701,10 +848,6 @@ func (s *Server) handleLuaNew(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !s.isSameOrigin(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
 
 	var req struct {
 		Name     string `json:"name"`
@@ -817,25 +960,6 @@ func (s *Server) handleIcons(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-// isSameOrigin returns true when the request appears to originate from the
-// editor itself (127.0.0.1) rather than from another web page.
-func (s *Server) isSameOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	referer := r.Header.Get("Referer")
-	for _, h := range []string{origin, referer} {
-		if h == "" {
-			continue
-		}
-		if strings.HasPrefix(h, "http://127.0.0.1:") ||
-			strings.HasPrefix(h, "http://localhost:") {
-			return true
-		}
-		return false // non-localhost origin present -> reject
-	}
-	// No Origin/Referer at all (e.g. curl) - allow (it's localhost anyway).
-	return true
-}
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
