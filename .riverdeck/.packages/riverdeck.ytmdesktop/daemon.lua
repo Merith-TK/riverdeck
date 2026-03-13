@@ -36,9 +36,9 @@ local BASE_URL      = "http://127.0.0.1:9863/api/v1"
 local APP_ID        = "riverdeckstreamdeck"
 local APP_NAME      = "Riverdeck Stream Deck"
 local APP_VER       = "1.0.0"
-local POLL_INTERVAL = 2000   -- ms between state polls when connected
-local RETRY_DELAY   = 10000  -- ms between reconnect attempts when YTM is absent
-local PAIR_TIMEOUT  = 35000  -- ms to wait for user to approve pairing (API max 30s)
+local POLL_INTERVAL    = 2000   -- ms between state polls when connected
+local RETRY_DELAY     = 10000  -- ms between reconnect attempts when YTM is absent
+local PAIR_TIMEOUT    = 35000  -- ms to wait for user to approve pairing (API max 30s)
 
 -- -- HTTP helpers --------------------------------------------------------------
 
@@ -63,10 +63,10 @@ end
 -- get_json: GET with optional auth header; returns (table|nil, status_code).
 -- status_code is 0 on hard network error, -1 on successful HTTP but JSON parse
 -- failure (to distinguish from real connection problems).
-local function get_json(url, token)
+local function get_json(url, token, timeout_ms)
     local headers = {}
     if token then headers["Authorization"] = token end
-    local body, status = http.request("GET", url, headers, "", 0)
+    local body, status = http.request("GET", url, headers, "", timeout_ms or 0)
     if not body then return nil, 0 end
     local t, decode_err = json.decode(body)
     if not t then
@@ -234,14 +234,7 @@ function M.daemon(state)
                 -- HTTP worked but we couldn't parse the response - don't
                 -- treat this as a full disconnect; just retry at normal rate.
                 log.warn("[ytm] /state parse error - retrying next poll.")
-
-            else
-                -- YTM Desktop stopped or network hiccup.
-                store.set('ytm.connected', false)
-                system.sleep(RETRY_DELAY)
             end
-
-            system.sleep(POLL_INTERVAL)
         else
             -- No token and no incoming pair request - sleep briefly then re-check.
             system.sleep(1000)

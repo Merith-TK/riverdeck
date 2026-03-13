@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           # - os: windows-latest
-          - os: ubuntu-latest
+          - os: ubuntu-22.04 # Wails v2 needs webkit2gtk-4.0 (dropped in 24.04)
 
     steps:
       - name: Checkout
