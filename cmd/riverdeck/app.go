@@ -34,6 +34,7 @@ import (
 	"github.com/merith-tk/riverdeck/pkg/layout"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
+	"github.com/merith-tk/riverdeck/pkg/wsdevice"
 	"github.com/merith-tk/riverdeck/resources"
 )
 
@@ -74,6 +75,10 @@ type App struct {
 	// backHeld is true while the back/home/settings key is physically held down.
 	// Transitions are dispatched to handleBackHoldChange for future system hooks.
 	backHeld bool
+
+	// wsServer manages WebSocket software-client device connections.
+	// Nil when WebSocket support is disabled or not in layout mode.
+	wsServer *wsdevice.Server
 }
 
 // NewApp creates a new application instance.
@@ -259,6 +264,35 @@ func (a *App) Init(configDir string, simAddr string) error {
 
 	// Start the passive update loop (15fps)
 	a.scriptMgr.StartPassiveLoop()
+
+	// Start WebSocket device server when enabled and in layout mode.
+	// Software clients connect via ws://host:port/ws and receive the layout
+	// as a stream of JSON messages, with key events flowing back.
+	if a.config.Network.WebSocketEnabled {
+		style := a.config.UI.NavigationStyle
+		if style == "layout" || style == "auto" {
+			wsModel := streamdeck.Model{
+				Name:        "Virtual Device",
+				Cols:        5,
+				Rows:        3,
+				Keys:        15,
+				PixelSize:   72,
+				ImageFormat: "JPEG",
+			}
+			port := a.config.Network.WebSocketPort
+			if port == 0 {
+				port = 9000
+			}
+			a.wsServer = wsdevice.NewServer(port, wsModel, func(wsDev *wsdevice.Device) {
+				a.runWSDevice(wsDev)
+			})
+			if startErr := a.wsServer.Start(a.ctx); startErr != nil {
+				log.Printf("[!] WS device server failed to start: %v", startErr)
+			} else {
+				log.Printf("[*] WebSocket device server listening on :%d  (connect: ws://localhost:%d/ws)", port, port)
+			}
+		}
+	}
 
 	return nil
 }

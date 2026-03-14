@@ -53,6 +53,15 @@ func LayoutPath(configDir string) string {
 	return filepath.Join(configDir, layoutFileName)
 }
 
+// DeviceLayoutDir returns the per-device configuration directory for the given
+// device identifier.  Hardware devices use their serial number; software clients
+// use a UUID.  The layout.json for that device lives at:
+//
+//	configDir/devices/{deviceID}/layout.json
+func DeviceLayoutDir(configDir, deviceID string) string {
+	return filepath.Join(configDir, "devices", deviceID)
+}
+
 // Exists reports whether a layout.json file exists in configDir.
 func Exists(configDir string) bool {
 	_, err := os.Stat(LayoutPath(configDir))
