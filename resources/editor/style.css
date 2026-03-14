@@ -771,3 +771,27 @@ details.pkg-group summary:hover {
 	border-color: var(--red);
 	color: var(--red-l)
 }
+
+/* ── Custom template elements ── */
+.pkg-actions {
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--border)
+}
+
+.pkg-action-btn {
+	width: 100%;
+	padding: 6px 12px;
+	font-size: .78rem
+}
+
+.custom-badge {
+	background: var(--amber) !important
+}
+
+.reserved-label {
+	font-size: .58rem;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+	color: var(--txt3);
+	opacity: .8
+}

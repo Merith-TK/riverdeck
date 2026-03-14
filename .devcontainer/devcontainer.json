@@ -1,0 +1,19 @@
+{
+	"name": "FactoryApp Dev",
+	"image": "git.merith.xyz/oci/archlinux:latest",
+	"remoteUser": "builder",
+	"remoteEnv": {
+		"CLAUDE_CONFIG_DIR": "${containerWorkspaceFolder}/.devcontainer/do-not-commit"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"geequlim.godot-tools"
+			],
+			"settings": {
+				"godot_tools.editor_path": "/usr/bin/godot"
+			}
+		}
+	},
+	"postCreateCommand": "bash ${containerWorkspaceFolder}/.devcontainer/post-create.sh"
+}

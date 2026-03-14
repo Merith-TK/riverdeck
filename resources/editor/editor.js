@@ -4,6 +4,7 @@
 let device = { cols: 5, rows: 3, keys: 15, model_name: '', reserved_keys: [] };
 let layout = { pages: [] };
 let packages = [];
+let customTemplates = [];
 let scripts = [];
 let mode = 'folder';
 
@@ -14,7 +15,8 @@ let pendingButton = null;
 // Monaco
 let monacoReady = false;
 let monacoEditor = null;
-let monacoCurrentPath = null;
+let monacoCurrentPath = null;  // for folder mode: relative file path
+let monacoCustomId = null;     // for layout mode: custom template id
 let activeConfigTab = 'form';
 
 // ── Monaco init ───────────────────────────────────────────────────────────────
@@ -22,7 +24,7 @@ require.config({ paths: { vs: '/api/monaco/vs' } });
 require(['vs/editor/editor.main'], function () {
 	monacoReady = true;
 	monacoEditor = monaco.editor.create(document.getElementById('monaco-tab'), {
-		value: '-- select a script button and click "Lua editor" to edit',
+		value: '-- select a script button to edit',
 		language: 'lua',
 		theme: 'vs-dark',
 		automaticLayout: true,
@@ -53,6 +55,7 @@ async function boot() {
 		document.getElementById('hdr-device').textContent =
 			device.model_name + ' (' + device.cols + 'x' + device.rows + ')';
 		updateModeToggle();
+		await refreshCustomTemplates();
 		renderAll();
 	} catch (e) {
 		toast('Failed to load: ' + e, true);
@@ -67,10 +70,19 @@ async function reloadFromDisk() {
 		]);
 		layout = lay || { pages: [] }; scripts = scr || [];
 		selectedSlot = null; pendingButton = null;
+		await refreshCustomTemplates();
 		renderAll();
 		toast('Reloaded from disk');
 	} catch (e) {
 		toast('Reload failed: ' + e, true);
+	}
+}
+
+async function refreshCustomTemplates() {
+	try {
+		customTemplates = await fetch('/api/custom-template').then(r => r.json()) || [];
+	} catch (_) {
+		customTemplates = [];
 	}
 }
 
@@ -138,7 +150,6 @@ function renderAll() {
 function renderPageTabs() {
 	const container = document.getElementById('page-tabs');
 	const addBtn = document.getElementById('tab-add');
-	// Remove old tabs
 	Array.from(container.querySelectorAll('.page-tab')).forEach(el => el.remove());
 
 	(layout.pages || []).forEach((page, i) => {
@@ -180,7 +191,18 @@ function renderGrid() {
 		if (reserved) el.classList.add('reserved');
 		if (i === selectedSlot) el.classList.add('selected');
 
-		if (btn && !reserved) {
+		// In folder mode, reserved keys show their role label
+		if (reserved && mode === 'folder') {
+			const role = folderReservedLabel(i);
+			let inner = '<span class="slot-num">' + i + '</span>';
+			inner += '<span class="lock-icon">&#x1F512;</span>';
+			inner += '<span class="key-label reserved-label">' + esc(role) + '</span>';
+			el.innerHTML = inner;
+			grid.appendChild(el);
+			continue;
+		}
+
+		if (btn) {
 			const act = btn.action || 'script';
 			if (act === 'home') el.classList.add('action-home');
 			else if (act === 'settings') el.classList.add('action-settings');
@@ -190,7 +212,6 @@ function renderGrid() {
 		}
 
 		let inner = '<span class="slot-num">' + i + '</span>';
-		if (reserved) inner += '<span class="lock-icon">&#x1F512;</span>';
 
 		if (btn) {
 			if (btn.icon) {
@@ -204,24 +225,28 @@ function renderGrid() {
 		}
 		el.innerHTML = inner;
 
-		if (!reserved) {
-			(function (slot) {
-				el.addEventListener('click', function () { selectedSlot = slot; initPending(); renderGrid(); renderConfigPanel(); });
-			})(i);
-		}
+		(function (slot) {
+			el.addEventListener('click', function () { selectedSlot = slot; initPending(); renderGrid(); renderConfigPanel(); });
+		})(i);
 		grid.appendChild(el);
 	}
+}
+
+function folderReservedLabel(slot) {
+	// key 0 = Back/SET, others in column 0 based on row
+	if (slot === 0) return 'BACK / SET';
+	const row = Math.floor(slot / device.cols);
+	if (row === 1) return 'T1 / PG\u25BC';
+	if (row === 2) return 'T2';
+	return 'RSV';
 }
 
 function isReservedKey(slot) {
 	if (mode === 'folder') {
 		return (device.reserved_keys || []).indexOf(slot) !== -1;
 	}
-	// layout mode: the home button slot is reserved
-	const pg = currentPage();
-	if (!pg) return false;
-	const homeBtn = (pg.buttons || []).find(function (b) { return b.action === 'home'; });
-	return !!(homeBtn && homeBtn.slot === slot);
+	// Layout mode: no reserved keys -- all slots are freely usable
+	return false;
 }
 
 function resolveIconURL(icon) {
@@ -242,6 +267,15 @@ function initPending() {
 }
 
 function renderConfigPanel() {
+	if (mode === 'folder') {
+		renderConfigPanelFolder();
+	} else {
+		renderConfigPanelLayout();
+	}
+}
+
+// ── Config panel: FOLDER mode ─────────────────────────────────────────────────
+function renderConfigPanelFolder() {
 	const formTab = document.getElementById('form-tab');
 	const btnActions = document.getElementById('btn-actions');
 	const configTabs = document.getElementById('config-tabs');
@@ -254,22 +288,20 @@ function renderConfigPanel() {
 		document.getElementById('monaco-tab').style.display = 'none';
 		btnActions.style.display = 'none';
 		configTabs.style.display = 'none';
-		panelTitle.textContent = 'Button config';
+		panelTitle.textContent = 'Button config \u2014 Folder';
 		return;
 	}
 
 	const v = pendingButton;
 	const action = v.action || 'script';
-	panelTitle.textContent = 'Slot ' + selectedSlot;
+	panelTitle.textContent = 'Slot ' + selectedSlot + ' \u2014 Folder';
 	btnActions.style.display = 'flex';
 	configTabs.style.display = 'flex';
 
 	const hasScript = !!(v.script);
-	const canEditLua = mode === 'folder' && hasScript;
-	monacoTab.style.display = canEditLua ? '' : 'none';
+	monacoTab.style.display = hasScript ? '' : 'none';
 
-	// Force back to form tab if lua edit is not available
-	if (!canEditLua && activeConfigTab === 'monaco') {
+	if (!hasScript && activeConfigTab === 'monaco') {
 		activeConfigTab = 'form';
 	}
 	applySplit(activeConfigTab);
@@ -289,7 +321,7 @@ function renderConfigPanel() {
 		});
 	}).join('');
 
-	// metadata schema for the current template
+	// metadata schema for current template
 	let metaSchema = [];
 	if (v.template) {
 		for (const pkg of packages) {
@@ -308,7 +340,7 @@ function renderConfigPanel() {
 
 	let scriptSection = '';
 	if (action === 'script' || action === '') {
-		const editBtn = (mode === 'folder' && v.script)
+		const editBtn = v.script
 			? '<button class="btn-ghost" style="white-space:nowrap;padding:4px 8px;flex-shrink:0" onclick="openInMonaco()">Edit</button>'
 			: '';
 		scriptSection = '<div class="form-row">' +
@@ -356,6 +388,129 @@ function renderConfigPanel() {
 		'</div>';
 }
 
+// ── Config panel: LAYOUT mode ─────────────────────────────────────────────────
+function renderConfigPanelLayout() {
+	const formTab = document.getElementById('form-tab');
+	const btnActions = document.getElementById('btn-actions');
+	const configTabs = document.getElementById('config-tabs');
+	const panelTitle = document.getElementById('config-panel-title');
+	const monacoTab = document.getElementById('ctab-monaco');
+
+	if (selectedSlot === null || pendingButton === null) {
+		formTab.innerHTML = '<p style="color:var(--txt3);font-size:.82rem;padding:8px">Click a button to edit it</p>';
+		formTab.style.display = '';
+		document.getElementById('monaco-tab').style.display = 'none';
+		btnActions.style.display = 'none';
+		configTabs.style.display = 'none';
+		panelTitle.textContent = 'Button config \u2014 Layout';
+		return;
+	}
+
+	const v = pendingButton;
+	const action = v.action || 'script';
+	panelTitle.textContent = 'Slot ' + selectedSlot + ' \u2014 Layout';
+	btnActions.style.display = 'flex';
+	configTabs.style.display = 'flex';
+
+	// In layout mode, Monaco is available for custom templates
+	const isCustom = !!(v.template && v.template.startsWith('pkg://_custom/'));
+	const customId = isCustom ? v.template.replace('pkg://_custom/', '') : null;
+	monacoTab.style.display = isCustom ? '' : 'none';
+
+	if (!isCustom && activeConfigTab === 'monaco') {
+		activeConfigTab = 'form';
+	}
+	applySplit(activeConfigTab);
+
+	// page options
+	const pageOpts = (layout.pages || []).map(function (p) {
+		return '<option value="' + esc(p.name) + '"' + (v.target_page === p.name ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+	}).join('');
+
+	// Build full template list (packages + custom)
+	const allTemplateOpts = [];
+	for (const pkg of packages) {
+		for (const t of (pkg.templates || [])) {
+			allTemplateOpts.push({ key: t.key, label: t.label, group: pkg.name || pkg.id });
+		}
+	}
+	for (const ct of customTemplates) {
+		allTemplateOpts.push({ key: 'pkg://_custom/' + ct.id, label: ct.label, group: 'Custom' });
+	}
+
+	// metadata schema for current template
+	let metaSchema = [];
+	if (v.template) {
+		// Check packages first
+		for (const pkg of packages) {
+			const tmpl = (pkg.templates || []).find(function (t) { return t.key === v.template; });
+			if (tmpl && tmpl.metadata_schema) { metaSchema = tmpl.metadata_schema; break; }
+		}
+	}
+
+	const metaFields = metaSchema.map(function (f) {
+		const val = (v.metadata || {})[f.key] || f.default || '';
+		return '<div class="form-row"><label>' + esc(f.label || f.key) +
+			' <span style="color:var(--blue-l);font-size:.65rem">[' + esc(f.key) + ']</span></label>' +
+			'<input type="text" data-meta-key="' + esc(f.key) + '" value="' + esc(val) + '"' +
+			' placeholder="' + esc(f.description || '') + '" oninput="updateMeta(this)"></div>';
+	}).join('');
+
+	let scriptSection = '';
+	if (action === 'script' || action === '') {
+		// Template selector  (select dropdown instead of raw text input)
+		const tmplSelectOpts = allTemplateOpts.map(function (t) {
+			return '<option value="' + esc(t.key) + '"' +
+				(v.template === t.key ? ' selected' : '') + '>' +
+				esc(t.label) + ' (' + esc(t.group) + ')</option>';
+		}).join('');
+
+		const editBtn = isCustom
+			? '<button class="btn-ghost" style="white-space:nowrap;padding:4px 8px;flex-shrink:0" onclick="openCustomInMonaco(\'' + esc(customId) + '\')">Edit Lua</button>'
+			: '';
+
+		scriptSection = '<div class="form-row">' +
+			'<label>Template</label>' +
+			'<div style="display:flex;gap:4px">' +
+			'<select id="f-template" onchange="pendingButton.template=this.value;renderConfigPanel()" style="flex:1">' +
+			'<option value="">-- none --</option>' +
+			tmplSelectOpts +
+			'</select>' +
+			editBtn + '</div></div>' +
+			metaFields;
+	}
+
+	let pageSection = '';
+	if (action === 'page') {
+		pageSection = '<div class="form-row">' +
+			'<label>Target page</label>' +
+			'<select id="f-target" onchange="pendingButton.target_page=this.value">' +
+			'<option value="">-- choose --</option>' +
+			pageOpts + '</select></div>';
+	}
+
+	formTab.innerHTML =
+		'<div class="form-row">' +
+		'<label>Label</label>' +
+		'<input id="f-label" type="text" value="' + esc(v.label || '') + '" oninput="pendingButton.label=this.value;liveUpdateGridKey()">' +
+		'</div>' +
+		'<div class="form-row">' +
+		'<label>Action</label>' +
+		'<select id="f-action" onchange="pendingButton.action=this.value;renderConfigPanel()">' +
+		'<option value="script"' + (action === 'script' || action === '' ? ' selected' : '') + '>Script (Lua)</option>' +
+		'<option value="page"' + (action === 'page' ? ' selected' : '') + '>Go to page</option>' +
+		'<option value="back"' + (action === 'back' ? ' selected' : '') + '>Back</option>' +
+		'<option value="home"' + (action === 'home' ? ' selected' : '') + '>SET / Home</option>' +
+		'<option value="settings"' + (action === 'settings' ? ' selected' : '') + '>Settings</option>' +
+		'</select></div>' +
+		scriptSection + pageSection +
+		'<div class="form-row">' +
+		'<label>Icon <span style="color:var(--txt3);font-size:.65rem">(pkg://... or path)</span></label>' +
+		'<input id="f-icon" type="text" value="' + esc(v.icon || '') + '" oninput="pendingButton.icon=this.value;liveUpdateGridKey()" placeholder="pkg://riverdeck/icons/home.png">' +
+		'</div>';
+}
+
+// ── Shared config panel helpers ───────────────────────────────────────────────
 function applySplit(tab) {
 	activeConfigTab = tab;
 	document.getElementById('ctab-form').classList.toggle('active', tab === 'form');
@@ -367,7 +522,16 @@ function applySplit(tab) {
 
 function switchConfigTab(tab) {
 	if (tab === 'monaco') {
-		openInMonacoNoSwitch().then(function () { applySplit('monaco'); });
+		if (mode === 'folder') {
+			openInMonacoNoSwitch().then(function () { applySplit('monaco'); });
+		} else {
+			// layout mode -- open custom template Lua
+			const tmpl = pendingButton ? pendingButton.template : '';
+			if (tmpl && tmpl.startsWith('pkg://_custom/')) {
+				const id = tmpl.replace('pkg://_custom/', '');
+				openCustomInMonacoNoSwitch(id).then(function () { applySplit('monaco'); });
+			}
+		}
 	} else {
 		applySplit('form');
 	}
@@ -388,10 +552,11 @@ function liveUpdateGridKey() {
 	if (lbl && pendingButton) lbl.textContent = pendingButton.label || '';
 }
 
+// ── Monaco: folder mode (filesystem scripts) ─────────────────────────────────
 async function openInMonacoNoSwitch() {
 	if (!monacoReady || !pendingButton || !pendingButton.script) return;
 	const path = pendingButton.script;
-	if (path === monacoCurrentPath) return;
+	if (path === monacoCurrentPath && monacoCustomId === null) return;
 	try {
 		const resp = await fetch('/api/file?path=' + encodeURIComponent(path));
 		if (resp.status === 404) {
@@ -402,6 +567,7 @@ async function openInMonacoNoSwitch() {
 			monacoEditor.setValue(await resp.text());
 		}
 		monacoCurrentPath = path;
+		monacoCustomId = null;
 		monacoEditor.setScrollPosition({ scrollTop: 0 });
 	} catch (e) {
 		toast('Could not open file: ' + e, true);
@@ -412,18 +578,61 @@ function openInMonaco() {
 	openInMonacoNoSwitch().then(function () { applySplit('monaco'); });
 }
 
-async function saveLuaFile() {
-	if (!monacoReady || !monacoCurrentPath) return;
+// ── Monaco: layout mode (custom templates) ────────────────────────────────────
+async function openCustomInMonacoNoSwitch(id) {
+	if (!monacoReady || !id) return;
+	if (monacoCustomId === id) return;
 	try {
-		const resp = await fetch('/api/file?path=' + encodeURIComponent(monacoCurrentPath), {
-			method: 'POST',
-			headers: { 'Content-Type': 'text/plain' },
-			body: monacoEditor.getValue(),
-		});
-		if (!resp.ok) throw new Error(await resp.text());
-		toast('Lua saved');
+		const resp = await fetch('/api/custom-template/file?id=' + encodeURIComponent(id));
+		if (resp.status === 404) {
+			monacoEditor.setValue('-- custom template: ' + id + '\n');
+		} else if (!resp.ok) {
+			throw new Error(await resp.text());
+		} else {
+			monacoEditor.setValue(await resp.text());
+		}
+		monacoCustomId = id;
+		monacoCurrentPath = null;
+		monacoEditor.setScrollPosition({ scrollTop: 0 });
 	} catch (e) {
-		toast('Lua save failed: ' + e, true);
+		toast('Could not open custom template: ' + e, true);
+	}
+}
+
+function openCustomInMonaco(id) {
+	openCustomInMonacoNoSwitch(id).then(function () { applySplit('monaco'); });
+}
+
+// ── Monaco: save (auto-detects folder vs custom) ─────────────────────────────
+async function saveLuaFile() {
+	if (!monacoReady) return;
+
+	if (monacoCustomId) {
+		// Layout mode: save to custom template
+		try {
+			const resp = await fetch('/api/custom-template/file?id=' + encodeURIComponent(monacoCustomId), {
+				method: 'POST',
+				headers: { 'Content-Type': 'text/plain' },
+				body: monacoEditor.getValue(),
+			});
+			if (!resp.ok) throw new Error(await resp.text());
+			toast('Custom template saved');
+		} catch (e) {
+			toast('Save failed: ' + e, true);
+		}
+	} else if (monacoCurrentPath) {
+		// Folder mode: save to filesystem
+		try {
+			const resp = await fetch('/api/file?path=' + encodeURIComponent(monacoCurrentPath), {
+				method: 'POST',
+				headers: { 'Content-Type': 'text/plain' },
+				body: monacoEditor.getValue(),
+			});
+			if (!resp.ok) throw new Error(await resp.text());
+			toast('Lua saved');
+		} catch (e) {
+			toast('Lua save failed: ' + e, true);
+		}
 	}
 }
 
@@ -438,11 +647,19 @@ function applyButton() {
 
 	btn.label = (document.getElementById('f-label')?.value ?? pendingButton.label) || '';
 	btn.action = (document.getElementById('f-action')?.value ?? pendingButton.action) || '';
-	btn.script = (document.getElementById('f-script')?.value ?? pendingButton.script) || '';
-	btn.template = (document.getElementById('f-template')?.value ?? pendingButton.template) || '';
-	btn.target_page = (document.getElementById('f-target')?.value ?? pendingButton.target_page) || '';
 	btn.icon = (document.getElementById('f-icon')?.value ?? pendingButton.icon) || '';
 	btn.metadata = pendingButton.metadata || {};
+
+	if (mode === 'folder') {
+		btn.script = (document.getElementById('f-script')?.value ?? pendingButton.script) || '';
+		btn.template = (document.getElementById('f-template')?.value ?? pendingButton.template) || '';
+	} else {
+		// Layout mode: template from select, no raw script path
+		btn.template = (document.getElementById('f-template')?.value ?? pendingButton.template) || '';
+		delete btn.script;
+	}
+
+	btn.target_page = (document.getElementById('f-target')?.value ?? pendingButton.target_page) || '';
 
 	// strip empties
 	['label', 'script', 'template', 'target_page', 'icon'].forEach(function (k) { if (!btn[k]) delete btn[k]; });
@@ -493,7 +710,58 @@ function renderPackages() {
 	const query = (document.getElementById('pkg-search')?.value || '').toLowerCase().trim();
 	container.innerHTML = '';
 
+	// In layout mode, show "Create Custom" button at top
+	if (mode === 'layout') {
+		const createRow = document.createElement('div');
+		createRow.className = 'pkg-actions';
+		createRow.innerHTML =
+			'<button class="btn-primary pkg-action-btn" onclick="createCustomTemplate()">+ Create Custom Template</button>';
+		container.appendChild(createRow);
+	}
+
 	let anyShown = false;
+
+	// Show custom templates first in layout mode
+	if (mode === 'layout' && customTemplates.length > 0) {
+		const filtered = customTemplates.filter(function (ct) {
+			if (!query) return true;
+			return (ct.label || '').toLowerCase().indexOf(query) !== -1 ||
+				(ct.id || '').toLowerCase().indexOf(query) !== -1 ||
+				(ct.description || '').toLowerCase().indexOf(query) !== -1;
+		});
+		if (filtered.length > 0) {
+			anyShown = true;
+			const det = document.createElement('details');
+			det.className = 'pkg-group';
+			det.open = true;
+			det.innerHTML = '<summary>Custom Templates <span style="color:var(--txt3);font-size:.7rem">_custom</span></summary>';
+
+			const BLANK_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23333'/%3E%3C/svg%3E";
+
+			for (const ct of filtered) {
+				const row = document.createElement('div');
+				row.className = 'pkg-tmpl';
+				row.title = ct.description || ct.label || '';
+				row.innerHTML =
+					'<img src="' + BLANK_SVG + '" alt="" loading="lazy">' +
+					'<div class="pkg-tmpl-info">' +
+					'<div class="tmpl-label">' + esc(ct.label) + '</div>' +
+					'<div class="tmpl-desc">' + esc(ct.description || ct.id || '') + '</div>' +
+					'</div>' +
+					'<button class="btn-danger" style="padding:2px 6px;font-size:.6rem;flex-shrink:0" onclick="event.stopPropagation();deleteCustomTemplate(\'' + esc(ct.id) + '\')">\u2715</button>' +
+					'<span class="pkg-badge custom-badge">CUSTOM</span>';
+
+				(function (cid, clabel) {
+					row.addEventListener('click', function () {
+						applyCustomTemplate(cid, clabel);
+					});
+				})(ct.id, ct.label);
+				det.appendChild(row);
+			}
+			container.appendChild(det);
+		}
+	}
+
 	for (const pkg of packages) {
 		const templates = (pkg.templates || []).filter(function (t) {
 			if (!query) return true;
@@ -517,13 +785,20 @@ function renderPackages() {
 			row.className = 'pkg-tmpl';
 			row.title = tmpl.description || tmpl.label || '';
 			const iconSrc = tmpl.icon_url ? esc(tmpl.icon_url) : BLANK_SVG;
+			let badgeHTML = '<span class="pkg-badge">PKG</span>';
+			// In layout mode, add "Duplicate & Edit" button
+			if (mode === 'layout') {
+				badgeHTML = '<button class="btn-ghost" style="padding:2px 6px;font-size:.58rem;flex-shrink:0;white-space:nowrap" ' +
+					'onclick="event.stopPropagation();duplicateTemplate(\'' + esc(pkg.id) + '\',\'' + esc(tmpl.key) + '\',\'' + esc(tmpl.label) + '\')">' +
+					'Dup&amp;Edit</button>' + badgeHTML;
+			}
 			row.innerHTML =
 				'<img src="' + iconSrc + '" alt="" loading="lazy" onerror="this.src=\'' + BLANK_SVG + '\'">' +
 				'<div class="pkg-tmpl-info">' +
 				'<div class="tmpl-label">' + esc(tmpl.label) + '</div>' +
 				'<div class="tmpl-desc">' + esc(tmpl.description || tmpl.key || '') + '</div>' +
 				'</div>' +
-				'<span class="pkg-badge">PKG</span>';
+				badgeHTML;
 
 			(function (p, t) { row.addEventListener('click', function () { applyTemplate(p, t); }); })(pkg, tmpl);
 			det.appendChild(row);
@@ -531,7 +806,7 @@ function renderPackages() {
 		container.appendChild(det);
 	}
 
-	if (!anyShown) {
+	if (!anyShown && mode !== 'layout') {
 		container.innerHTML = '<p class="pkg-no-results">No templates found</p>';
 	}
 }
@@ -563,9 +838,10 @@ async function applyTemplate(pkg, tmpl) {
 			pendingButton.label = tmpl.label || '';
 			if (tmpl.icon_url) pendingButton.icon = 'pkg://' + pkg.id + '/' + (tmpl.icon || '');
 			renderConfigPanel();
-			toast('Template assigned -- click Apply to confirm');
+			toast('Template copied to filesystem \u2014 click Apply');
 		} catch (e) { toast('Assign failed: ' + e, true); }
 	} else {
+		// Layout mode: create an instance reference (not a copy)
 		initPending();
 		pendingButton.template = tmpl.key;
 		pendingButton.label = tmpl.label || '';
@@ -575,8 +851,79 @@ async function applyTemplate(pkg, tmpl) {
 			if (f.default) pendingButton.metadata[f.key] = f.default;
 		}
 		renderConfigPanel();
-		toast('Template selected -- click Apply to confirm');
+		toast('Template instance set \u2014 click Apply');
 	}
+}
+
+// ── Custom templates (layout mode) ────────────────────────────────────────────
+async function createCustomTemplate() {
+	const id = prompt('Template ID (letters, digits, underscore, dash):');
+	if (!id) return;
+	const label = prompt('Display label:', id);
+	if (!label) return;
+	try {
+		const resp = await fetch('/api/custom-template', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ id: id, label: label }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		await refreshCustomTemplates();
+		// Also re-scan packages so _custom shows up
+		packages = await fetch('/api/packages').then(r => r.json()) || [];
+		renderPackages();
+		toast('Custom template created: ' + label);
+	} catch (e) {
+		toast('Create failed: ' + e, true);
+	}
+}
+
+async function duplicateTemplate(pkgId, templateKey, templateLabel) {
+	const id = prompt('ID for the duplicate (letters, digits, _, -):', templateLabel.toLowerCase().replace(/[^a-z0-9_-]/g, '_'));
+	if (!id) return;
+	const label = prompt('Label:', templateLabel + ' (custom)');
+	if (!label) return;
+	try {
+		const resp = await fetch('/api/custom-template', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ id: id, label: label, source_script: templateKey }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		await refreshCustomTemplates();
+		packages = await fetch('/api/packages').then(r => r.json()) || [];
+		renderPackages();
+		toast('Duplicated as custom: ' + label);
+	} catch (e) {
+		toast('Duplicate failed: ' + e, true);
+	}
+}
+
+async function deleteCustomTemplate(id) {
+	if (!confirm('Delete custom template "' + id + '"?')) return;
+	try {
+		const resp = await fetch('/api/custom-template?id=' + encodeURIComponent(id), { method: 'DELETE' });
+		if (!resp.ok) throw new Error(await resp.text());
+		await refreshCustomTemplates();
+		packages = await fetch('/api/packages').then(r => r.json()) || [];
+		renderPackages();
+		toast('Deleted');
+	} catch (e) {
+		toast('Delete failed: ' + e, true);
+	}
+}
+
+function applyCustomTemplate(id, label) {
+	if (selectedSlot === null) {
+		toast('Select a slot first', true);
+		return;
+	}
+	initPending();
+	pendingButton.template = 'pkg://_custom/' + id;
+	pendingButton.label = label || id;
+	pendingButton.metadata = {};
+	renderConfigPanel();
+	toast('Custom template set \u2014 click Apply');
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
