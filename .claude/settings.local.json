@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod:*)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(go list:*)",
+      "Bash(go doc:*)",
+      "Bash(go get:*)",
+      "Bash(mage:*)",
+      "Bash(wails:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "riverdeck-wsdevice"
+  ],
+  "spinnerTipsEnabled": false,
+  "enableAllProjectMcpServers": true
+}

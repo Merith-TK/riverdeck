@@ -70,7 +70,7 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// serveWS handles the HTTP → WebSocket upgrade and drives a Device session.
+// serveWS handles the HTTP -> WebSocket upgrade and drives a Device session.
 // It honours an optional ?uuid= query parameter so clients can resume sessions.
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)

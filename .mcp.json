@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "riverdeck-wsdevice": {
+      "command": "go",
+      "args": ["run", "./cmd/mcp-wsdevice/"],
+      "cwd": "/workspaces/riverdeck",
+      "type": "stdio"
+    }
+  }
+}

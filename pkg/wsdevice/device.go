@@ -4,16 +4,16 @@
 // and receives the layout state as a stream of JSON messages.  Key-press events
 // are sent back from the client over the same connection.
 //
-// Protocol – server → client (JSON text frames):
+// Protocol - server -> client (JSON text frames):
 //
-//	{"type":"devinfo",      "uuid":"…","cols":5,"rows":3,"keys":15,"pixel_size":72,"model_name":"Virtual Device"}
+//	{"type":"devinfo",      "uuid":"...","cols":5,"rows":3,"keys":15,"pixel_size":72,"model_name":"Virtual Device"}
 //	{"type":"setimage",     "key":0,"data":"<base64 PNG>"}
 //	{"type":"setkeycolor",  "key":0,"r":255,"g":0,"b":0}
 //	{"type":"setbrightness","value":75}
 //	{"type":"clear"}
 //	{"type":"reset"}
 //
-// Protocol – client → server (JSON text frames):
+// Protocol - client -> server (JSON text frames):
 //
 //	{"type":"keyevent","key":0,"pressed":true}
 package wsdevice
@@ -155,7 +155,7 @@ func (d *Device) SetKeyColor(keyIndex int, c color.Color) error {
 }
 
 // EncodeKeyImage resizes img to the device pixel size and encodes it as PNG.
-// No 180° rotation is applied — software clients display images as-is.
+// No 180° rotation is applied -- software clients display images as-is.
 func (d *Device) EncodeKeyImage(img image.Image) ([]byte, error) {
 	resized := d.ResizeImage(img)
 	var buf bytes.Buffer
@@ -257,9 +257,9 @@ func (d *Device) CoordToKey(col, row int) int {
 	return row*d.model.Cols + col
 }
 
-func (d *Device) Cols() int                    { return d.model.Cols }
-func (d *Device) Rows() int                    { return d.model.Rows }
-func (d *Device) Keys() int                    { return d.model.Keys }
-func (d *Device) PixelSize() int               { return d.model.PixelSize }
-func (d *Device) ModelName() string            { return d.model.Name }
+func (d *Device) Cols() int                      { return d.model.Cols }
+func (d *Device) Rows() int                      { return d.model.Rows }
+func (d *Device) Keys() int                      { return d.model.Keys }
+func (d *Device) PixelSize() int                 { return d.model.PixelSize }
+func (d *Device) ModelName() string              { return d.model.Name }
 func (d *Device) GetInfo() streamdeck.DeviceInfo { return d.info }
