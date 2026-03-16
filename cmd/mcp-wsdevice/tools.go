@@ -20,6 +20,15 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		configDir = defaultConfigDir()
 	}
 
+	// Auto-resume: if no UUID was explicitly provided, try to load the stored one.
+	resumed := false
+	if uuid == "" {
+		if stored := loadStoredUUID(configDir); stored != "" {
+			uuid = stored
+			resumed = true
+		}
+	}
+
 	state.mu.Lock()
 	if state.connected {
 		state.mu.Unlock()
@@ -57,9 +66,17 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	cols, rows, keys := state.cols, state.rows, state.keys
 	state.mu.Unlock()
 
+	// Persist the UUID so future sessions auto-resume.
+	storeUUID(configDir, uid)
+
+	resumeNote := ""
+	if resumed {
+		resumeNote = "  (resumed stored session)"
+	}
+
 	return mcp.NewToolResultText(fmt.Sprintf(
-		"Connected.\nuuid:  %s\nmodel: %s\ngrid:  %dx%d (%d keys)\nconfigDir: %s",
-		uid, model, cols, rows, keys, configDir,
+		"Connected.%s\nuuid:  %s\nmodel: %s\ngrid:  %dx%d (%d keys)\nconfigDir: %s",
+		resumeNote, uid, model, cols, rows, keys, configDir,
 	)), nil
 }
 
@@ -173,18 +190,17 @@ func toolReadLayout(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResu
 		return mcp.NewToolResultError("not connected (call rd_connect first)"), nil
 	}
 
-	devDir := layout.DeviceLayoutDir(configDir, uuid)
-	lay, err := layout.Load(devDir)
+	lay, err := layout.LoadForDevice(configDir, uuid)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("load layout from %s: %v", devDir, err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("load layout from %s: %v", configDir, err)), nil
 	}
-	if lay == nil {
-		return mcp.NewToolResultText(fmt.Sprintf("No layout.json found at %s", devDir)), nil
+	if lay == nil || len(lay.Pages) == 0 {
+		return mcp.NewToolResultText(fmt.Sprintf("No layout found for uuid=%s in %s", uuid, configDir)), nil
 	}
 
 	data, err := json.MarshalIndent(lay, "", "  ")
 	if err != nil {
 		return mcp.NewToolResultError("marshal layout: " + err.Error()), nil
 	}
-	return mcp.NewToolResultText(fmt.Sprintf("layout.json (%s):\n\n%s", devDir, string(data))), nil
+	return mcp.NewToolResultText(fmt.Sprintf("layout for uuid=%s (%s):\n\n%s", uuid, configDir, string(data))), nil
 }

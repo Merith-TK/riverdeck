@@ -53,16 +53,17 @@ type Config struct {
 
 // Server holds the editor API state.
 type Server struct {
-	cfg    Config
-	mu     sync.RWMutex
-	layout *layout.Layout // current in-memory layout (nil until first load)
+	cfg        Config
+	mu         sync.RWMutex
+	layout     *layout.Layout // current in-memory layout (nil until first load)
+	layoutName string         // which named layout this session manages ("default" unless overridden)
 }
 
 // New creates a new Server with the given configuration.
 func New(cfg Config) *Server {
-	s := &Server{cfg: cfg}
+	s := &Server{cfg: cfg, layoutName: "default"}
 	// Pre-load the layout so it's available immediately.
-	if lay, err := layout.Load(cfg.ConfigDir); err == nil && lay != nil {
+	if lay, err := layout.LoadForDevice(cfg.ConfigDir, ""); err == nil && lay != nil {
 		s.layout = lay
 	}
 	return s

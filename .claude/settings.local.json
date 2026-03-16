@@ -8,12 +8,17 @@
       "Bash(go doc:*)",
       "Bash(go get:*)",
       "Bash(mage:*)",
-      "Bash(wails:*)"
+      "Bash(wails:*)",
+      "mcp__riverdeck-wsdevice__rd_connect",
+      "mcp__riverdeck-wsdevice__rd_get_state",
+      "mcp__riverdeck-wsdevice__rd_read_layout",
+      "mcp__riverdeck-wsdevice__rd_disconnect",
+      "mcp__riverdeck-wsdevice__rd_press_key"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "riverdeck-wsdevice"
   ],
-  "spinnerTipsEnabled": false,
-  "enableAllProjectMcpServers": true
+  "spinnerTipsEnabled": false
 }

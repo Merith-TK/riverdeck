@@ -63,16 +63,16 @@ func (a *App) createNavigator(dev streamdeck.DeviceIface, dir string) streamdeck
 	}
 
 	if useLayout {
-		lay, err := layout.Load(dir)
+		lay, err := layout.LoadForDevice(dir, dev.GetInfo().Serial)
 		if err != nil {
 			log.Printf("[!] Failed to load layout.json (%v), falling back to folder navigation", err)
-		} else if lay != nil {
+		} else if lay != nil && len(lay.Pages) > 0 {
 			log.Printf("[*] Navigation mode: layout (%d pages)", len(lay.Pages))
 			return streamdeck.NewLayoutNavigator(dev, dir, lay)
 		} else if style == "layout" {
-			// "layout" was explicitly set but no layout.json exists - create a blank one.
+			// "layout" was explicitly set but no layout exists - create a blank one.
 			lay = layout.NewEmpty()
-			if serr := layout.Save(dir, lay); serr != nil {
+			if serr := layout.SaveLayout(dir, "default", lay); serr != nil {
 				log.Printf("[!] Could not create blank layout.json: %v", serr)
 			} else {
 				log.Printf("[*] Navigation mode: layout (new empty layout created)")

@@ -1,0 +1,73 @@
+{
+  "pages": [
+    {
+      "name": "Main",
+      "buttons": [
+        {
+          "slot": 0,
+          "label": "HOME",
+          "icon": "pkg://riverdeck/icons/home.svg",
+          "action": "home"
+        },
+        {
+          "slot": 1,
+          "label": "Media",
+          "icon": "pkg://riverdeck/icons/folder.svg",
+          "action": "page",
+          "target_page": "Media"
+        },
+        {
+          "slot": 2,
+          "label": "System",
+          "icon": "pkg://riverdeck/icons/folder.svg",
+          "action": "page",
+          "target_page": "System"
+        },
+        {
+          "slot": 14,
+          "label": "Settings",
+          "icon": "pkg://riverdeck/icons/settings.svg",
+          "action": "settings"
+        },
+        {
+          "slot": 4,
+          "label": "Fuck"
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "buttons": [
+        {
+          "slot": 0,
+          "label": "HOME",
+          "icon": "pkg://riverdeck/icons/home.svg",
+          "action": "home"
+        },
+        {
+          "slot": 5,
+          "label": "Back",
+          "icon": "pkg://riverdeck/icons/back.svg",
+          "action": "back"
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "buttons": [
+        {
+          "slot": 0,
+          "label": "HOME",
+          "icon": "pkg://riverdeck/icons/home.svg",
+          "action": "home"
+        },
+        {
+          "slot": 5,
+          "label": "Back",
+          "icon": "pkg://riverdeck/icons/back.svg",
+          "action": "back"
+        }
+      ]
+    }
+  ]
+}

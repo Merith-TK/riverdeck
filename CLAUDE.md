@@ -45,6 +45,15 @@
 5. **Document Results**: Add review section to `.devcontainer/claude/todo.md`
 6. **Capture Lessons**: Update `.devcontainer/claude/notes.md` after corrections
 
+## Environment
+
+### Project Layout
+- **Project root**: `/workspace/github.com/Merith-TK/riverdeck/`
+- **Task tracking**: `.devcontainer/claude/todo.md`
+- **Lessons / notes**: `.devcontainer/claude/notes.md`
+- **MCP server config**: `.mcp.json` at project root
+- **Auto-memory**: `~/.claude/projects/-workspace-github-com-Merith-TK-riverdeck/memory/` — do NOT place memory files inside the project directory
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.

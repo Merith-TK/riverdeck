@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,4 +141,21 @@ func defaultConfigDir() string {
 		return ".riverdeck"
 	}
 	return filepath.Join(home, ".riverdeck")
+}
+
+const uuidFileName = ".mcp-client-uuid"
+
+// loadStoredUUID reads the persisted UUID from configDir/.mcp-client-uuid.
+// Returns "" if the file does not exist or cannot be read.
+func loadStoredUUID(configDir string) string {
+	data, err := os.ReadFile(filepath.Join(configDir, uuidFileName))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// storeUUID writes uuid to configDir/.mcp-client-uuid so it survives restarts.
+func storeUUID(configDir, uuid string) {
+	_ = os.WriteFile(filepath.Join(configDir, uuidFileName), []byte(uuid+"\n"), 0644)
 }

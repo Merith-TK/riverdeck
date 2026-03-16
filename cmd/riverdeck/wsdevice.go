@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"github.com/merith-tk/riverdeck/pkg/layout"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
@@ -13,49 +12,21 @@ import (
 // It is called from the WS server's onConnect callback and blocks until the
 // client disconnects.
 //
-// Each client gets its own layout.json stored at:
-//
-//	configPath/devices/{uuid}/layout.json
-//
-// On first connection the layout is seeded from the root layout.json (if it
-// exists) so the client starts with a usable configuration.
+// The layout for the client is resolved from layout.json by device UUID.
+// If no explicit assignment exists the "default" layout is used, allowing
+// multiple software clients to share layouts with hardware devices.
 //
 // Script execution is not supported for WS clients in this iteration; buttons
 // with action:"page"/"back"/"home" still navigate the layout normally.
 func (a *App) runWSDevice(dev *wsdevice.Device) {
 	uuid := dev.UUID()
-	devDir := layout.DeviceLayoutDir(a.configPath, uuid)
 
-	if err := os.MkdirAll(devDir, 0755); err != nil {
-		log.Printf("[wsdevice] failed to create device dir %s: %v", devDir, err)
-		return
-	}
-
-	// Seed a layout.json for this device on first connection.
-	if !layout.Exists(devDir) {
-		if rootLay, _ := layout.Load(a.configPath); rootLay != nil {
-			if err := layout.Save(devDir, rootLay); err != nil {
-				log.Printf("[wsdevice] failed to seed layout for %s: %v", uuid, err)
-			}
-		} else {
-			if err := layout.Save(devDir, layout.NewEmpty()); err != nil {
-				log.Printf("[wsdevice] failed to create empty layout for %s: %v", uuid, err)
-			}
-		}
-	}
-
-	lay, err := layout.Load(devDir)
+	lay, err := layout.LoadForDevice(a.configPath, uuid)
 	if err != nil {
-		log.Printf("[wsdevice] layout load error for %s: %v", uuid, err)
-		lay = layout.NewEmpty()
-	}
-	if lay == nil {
+		log.Printf("[wsdevice] layout load error uuid=%s: %v", uuid, err)
 		lay = layout.NewEmpty()
 	}
 
-	// Use the global configPath for script resolution so that pkg:// URIs and
-	// relative script paths work correctly.  The layout file itself lives in
-	// devDir, but everything else lives under the shared config root.
 	nav := streamdeck.NewLayoutNavigator(dev, a.configPath, lay)
 
 	if err := dev.SetBrightness(a.config.Application.Brightness); err != nil {
@@ -65,7 +36,7 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 		log.Printf("[wsdevice] initial RenderPage error: %v", err)
 	}
 
-	log.Printf("[wsdevice] session started uuid=%s", uuid)
+	log.Printf("[wsdevice] session started uuid=%s layout=%d pages", uuid, len(lay.Pages))
 
 	events := make(chan streamdeck.KeyEvent, 10)
 	dev.ListenKeys(dev.Context(), events)

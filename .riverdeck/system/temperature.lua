@@ -22,7 +22,7 @@ function script.background(state)
             if not state.temperature then
                 out, _, code = shell.exec("vcgencmd measure_temp 2>/dev/null | sed 's/temp=//' | sed \"s/'C//\"")
                 if code == 0 then
-                    state.temperature = tonumber((out or ""):match("([%d%.]+)"))
+                    state.temperature = tonumber((out or ""):match("([%d%.]+)") or "0")
                 end
             end
         else

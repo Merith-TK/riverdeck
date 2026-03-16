@@ -31,7 +31,10 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"errors": errs})
 			return
 		}
-		if err := layout.Save(s.cfg.ConfigDir, &incoming); err != nil {
+		s.mu.RLock()
+		layoutName := s.layoutName
+		s.mu.RUnlock()
+		if err := layout.SaveLayout(s.cfg.ConfigDir, layoutName, &incoming); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}

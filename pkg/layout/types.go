@@ -94,11 +94,41 @@ type LayoutPage struct {
 	Buttons []LayoutButton `json:"buttons"`
 }
 
-// Layout is the root document stored in layout.json.
+// Layout is a single named layout containing an ordered list of pages.
+// The first page (index 0) is shown at startup.
 type Layout struct {
-	// Pages is the ordered list of pages.  The first page (index 0) is shown
-	// at startup when the layout navigator is used.
 	Pages []LayoutPage `json:"pages"`
+}
+
+// LayoutFile is the top-level structure stored as layout.json.
+// It holds named layout definitions and an optional device→layout mapping.
+//
+// Example:
+//
+//	{
+//	  "layouts": {
+//	    "default": {"pages": [...]},
+//	    "gaming":  {"pages": [...]}
+//	  },
+//	  "devices": {
+//	    "ABC123serial": "gaming"
+//	  }
+//	}
+//
+// Devices not listed in "devices" fall back to the "default" layout.
+// Old-format files ({"pages":[...]}) are automatically promoted to
+// layouts["default"] when loaded.
+type LayoutFile struct {
+	// Layouts holds all named layout definitions.
+	Layouts map[string]*Layout `json:"layouts,omitempty"`
+
+	// Devices maps device identifiers (serial / UUID) to layout names.
+	// Omit a device to use "default".
+	Devices map[string]string `json:"devices,omitempty"`
+
+	// Pages is only present in old-format files; never written by new code.
+	// Promoted to Layouts["default"] on load.
+	Pages []LayoutPage `json:"pages,omitempty"`
 }
 
 // ButtonBySlot returns the button at slot s on this page, or nil if none.

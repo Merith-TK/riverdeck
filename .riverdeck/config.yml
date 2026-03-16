@@ -1,5 +1,5 @@
 application:
-  brightness: 70
+  brightness: 75
   passive_fps: 15
   timeout: 30
   debug: false
@@ -12,7 +12,7 @@ scripting:
   execution_timeout: 30
   max_concurrent_scripts: 10
 ui:
-  navigation_style: folder
+  navigation_style: layout
   show_hidden_files: false
   labels:
     back: <-
@@ -24,6 +24,8 @@ performance:
 network:
   http_timeout: 10
   verify_ssl: true
+  websocket_enabled: true
+  websocket_port: 9000
 logging:
   level: info
   file: ""

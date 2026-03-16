@@ -1,73 +1,162 @@
 {
-  "pages": [
-    {
-      "name": "Main",
-      "buttons": [
-        {
-          "slot": 0,
-          "label": "HOME",
-          "icon": "pkg://riverdeck/icons/home.svg",
-          "action": "home"
-        },
-        {
-          "slot": 1,
-          "label": "Media",
-          "icon": "pkg://riverdeck/icons/folder.svg",
-          "action": "page",
-          "target_page": "Media"
-        },
-        {
-          "slot": 2,
-          "label": "System",
-          "icon": "pkg://riverdeck/icons/folder.svg",
-          "action": "page",
-          "target_page": "System"
-        },
-        {
-          "slot": 14,
-          "label": "Settings",
-          "icon": "pkg://riverdeck/icons/settings.svg",
-          "action": "settings"
-        },
-        {
-          "slot": 4,
-          "label": "Fuck"
-        }
-      ]
-    },
-    {
-      "name": "Media",
-      "buttons": [
-        {
-          "slot": 0,
-          "label": "HOME",
-          "icon": "pkg://riverdeck/icons/home.svg",
-          "action": "home"
-        },
-        {
-          "slot": 5,
-          "label": "Back",
-          "icon": "pkg://riverdeck/icons/back.svg",
-          "action": "back"
-        }
-      ]
-    },
-    {
-      "name": "System",
-      "buttons": [
-        {
-          "slot": 0,
-          "label": "HOME",
-          "icon": "pkg://riverdeck/icons/home.svg",
-          "action": "home"
-        },
-        {
-          "slot": 5,
-          "label": "Back",
-          "icon": "pkg://riverdeck/icons/back.svg",
-          "action": "back"
-        }
-      ]
-    }
-  ]
+	"layouts": {
+		"default": {
+			"pages": [
+				{
+					"name": "Main",
+					"buttons": [
+						{
+							"slot": 0,
+							"label": "HOME",
+							"icon": "pkg://riverdeck/icons/home.svg",
+							"action": "home"
+						},
+						{
+							"slot": 1,
+							"label": "Media",
+							"icon": "pkg://riverdeck/icons/folder.svg",
+							"action": "page",
+							"target_page": "Media"
+						},
+						{
+							"slot": 2,
+							"label": "System",
+							"icon": "pkg://riverdeck/icons/folder.svg",
+							"action": "page",
+							"target_page": "System"
+						},
+						{
+							"slot": 3,
+							"label": "Apps",
+							"icon": "pkg://riverdeck/icons/folder.svg",
+							"action": "page",
+							"target_page": "Apps"
+						},
+						{
+							"slot": 14,
+							"label": "Settings",
+							"icon": "pkg://riverdeck/icons/settings.svg",
+							"action": "settings"
+						}
+					]
+				},
+				{
+					"name": "Media",
+					"buttons": [
+						{
+							"slot": 0,
+							"label": "HOME",
+							"icon": "pkg://riverdeck/icons/home.svg",
+							"action": "home"
+						},
+						{
+							"slot": 5,
+							"label": "Back",
+							"icon": "pkg://riverdeck/icons/back.svg",
+							"action": "back"
+						},
+						{
+							"slot": 1,
+							"label": "Pair",
+							"script": "media/pair.lua"
+						},
+						{
+							"slot": 2,
+							"label": "Playing",
+							"script": "media/playing.lua"
+						}
+					]
+				},
+				{
+					"name": "System",
+					"buttons": [
+						{
+							"slot": 0,
+							"label": "HOME",
+							"icon": "pkg://riverdeck/icons/home.svg",
+							"action": "home"
+						},
+						{
+							"slot": 5,
+							"label": "Back",
+							"icon": "pkg://riverdeck/icons/back.svg",
+							"action": "back"
+						},
+						{
+							"slot": 1,
+							"label": "CPU",
+							"script": "system/cpu.lua"
+						},
+						{
+							"slot": 2,
+							"label": "Mem",
+							"script": "system/memory.lua"
+						},
+						{
+							"slot": 3,
+							"label": "Disk",
+							"script": "system/disk.lua"
+						},
+						{
+							"slot": 4,
+							"label": "Temp",
+							"script": "system/temperature.lua"
+						},
+						{
+							"slot": 6,
+							"label": "Net",
+							"script": "system/network.lua"
+						},
+						{
+							"slot": 7,
+							"label": "Uptime",
+							"script": "system/uptime.lua"
+						},
+						{
+							"slot": 8,
+							"label": "Shutdown",
+							"script": "system/shutdown.lua"
+						}
+					]
+				},
+				{
+					"name": "Apps",
+					"buttons": [
+						{
+							"slot": 0,
+							"label": "HOME",
+							"icon": "pkg://riverdeck/icons/home.svg",
+							"action": "home"
+						},
+						{
+							"slot": 5,
+							"label": "Back",
+							"icon": "pkg://riverdeck/icons/back.svg",
+							"action": "back"
+						},
+						{
+							"slot": 1,
+							"label": "Counter",
+							"script": "apps/counter.lua"
+						},
+						{
+							"slot": 2,
+							"label": "RGB",
+							"script": "apps/rgb.lua"
+						},
+						{
+							"slot": 3,
+							"label": "Example",
+							"script": "apps/example_module.lua"
+						},
+						{
+							"slot": 4,
+							"label": "Nano",
+							"script": "apps/nano.lua"
+						}
+					]
+				}
+			]
+		}
+	}
 }

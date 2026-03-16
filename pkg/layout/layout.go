@@ -53,25 +53,16 @@ func LayoutPath(configDir string) string {
 	return filepath.Join(configDir, layoutFileName)
 }
 
-// DeviceLayoutDir returns the per-device configuration directory for the given
-// device identifier.  Hardware devices use their serial number; software clients
-// use a UUID.  The layout.json for that device lives at:
-//
-//	configDir/devices/{deviceID}/layout.json
-func DeviceLayoutDir(configDir, deviceID string) string {
-	return filepath.Join(configDir, "devices", deviceID)
-}
-
 // Exists reports whether a layout.json file exists in configDir.
 func Exists(configDir string) bool {
 	_, err := os.Stat(LayoutPath(configDir))
 	return err == nil
 }
 
-// Load reads layout.json from configDir and parses it.
-// Returns (nil, nil) when the file does not exist so callers can fall back
-// gracefully to the file-browser navigator.
-func Load(configDir string) (*Layout, error) {
+// LoadFile reads layout.json from configDir and returns a normalised LayoutFile.
+// Old-format files ({"pages":[...]}) are automatically promoted to
+// Layouts["default"].  Returns (nil, nil) when the file does not exist.
+func LoadFile(configDir string) (*LayoutFile, error) {
 	data, err := os.ReadFile(LayoutPath(configDir))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -80,26 +71,82 @@ func Load(configDir string) (*Layout, error) {
 		return nil, fmt.Errorf("reading layout.json: %w", err)
 	}
 
-	var l Layout
-	if err := json.Unmarshal(data, &l); err != nil {
+	var f LayoutFile
+	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parsing layout.json: %w", err)
 	}
-	return &l, nil
+
+	// Backward compat: old format had pages at the top level.
+	if len(f.Pages) > 0 && len(f.Layouts) == 0 {
+		if f.Layouts == nil {
+			f.Layouts = make(map[string]*Layout)
+		}
+		f.Layouts["default"] = &Layout{Pages: f.Pages}
+		f.Pages = nil
+	}
+
+	return &f, nil
 }
 
-// Save writes l as layout.json into configDir (creating the directory if needed).
-// The file is written atomically: it is first written to a temp file and then
-// renamed so a concurrent reader never sees a half-written file.
-func Save(configDir string, l *Layout) error {
+// LoadForDevice returns the Layout assigned to deviceID in configDir/layout.json.
+// If deviceID has no explicit assignment, "default" is used.
+// Returns a new empty Layout when the file does not exist or the layout is absent.
+func LoadForDevice(configDir, deviceID string) (*Layout, error) {
+	f, err := LoadFile(configDir)
+	if err != nil {
+		return nil, err
+	}
+	if f == nil || len(f.Layouts) == 0 {
+		return NewEmpty(), nil
+	}
+
+	name := "default"
+	if deviceID != "" {
+		if f.Devices != nil {
+			if assigned, ok := f.Devices[deviceID]; ok {
+				name = assigned
+			}
+		}
+	}
+
+	if lay, ok := f.Layouts[name]; ok {
+		return lay, nil
+	}
+	// Final fallback: "default" layout (in case a named layout was deleted).
+	if name != "default" {
+		if lay, ok := f.Layouts["default"]; ok {
+			return lay, nil
+		}
+	}
+	return NewEmpty(), nil
+}
+
+// SaveLayout updates (or creates) the named layout in configDir/layout.json.
+// Other layouts and device assignments in the file are preserved.
+func SaveLayout(configDir, name string, lay *Layout) error {
+	f, err := LoadFile(configDir)
+	if err != nil {
+		return err
+	}
+	if f == nil {
+		f = &LayoutFile{}
+	}
+	if f.Layouts == nil {
+		f.Layouts = make(map[string]*Layout)
+	}
+	f.Layouts[name] = lay
+	return writeFile(configDir, f)
+}
+
+// writeFile serialises f to configDir/layout.json atomically.
+func writeFile(configDir string, f *LayoutFile) error {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-
-	data, err := json.MarshalIndent(l, "", "  ")
+	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshalling layout: %w", err)
+		return fmt.Errorf("marshalling layout file: %w", err)
 	}
-
 	tmp := LayoutPath(configDir) + ".tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return fmt.Errorf("writing layout.json.tmp: %w", err)
