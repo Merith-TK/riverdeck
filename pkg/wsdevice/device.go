@@ -1,21 +1,26 @@
 // Package wsdevice provides a WebSocket-backed virtual Stream Deck device.
 //
-// A software client (web app, mobile app, desktop app) connects via WebSocket
-// and receives the layout state as a stream of JSON messages.  Key-press events
-// are sent back from the client over the same connection.
-//
-// Protocol - server -> client (JSON text frames):
-//
-//	{"type":"devinfo",      "uuid":"...","cols":5,"rows":3,"keys":15,"pixel_size":72,"model_name":"Virtual Device"}
-//	{"type":"setimage",     "key":0,"data":"<base64 PNG>"}
-//	{"type":"setkeycolor",  "key":0,"r":255,"g":0,"b":0}
-//	{"type":"setbrightness","value":75}
-//	{"type":"clear"}
-//	{"type":"reset"}
+// A software client (web app, mobile app, custom hardware) connects via
+// WebSocket and sends a hello message declaring its identity and capabilities.
+// The server responds with ack, then begins pushing frame and label messages
+// per input.  Key events arrive as input messages from the client.
 //
 // Protocol - client -> server (JSON text frames):
 //
-//	{"type":"keyevent","key":0,"pressed":true}
+//	{"type":"hello","id":"<stable-id>","name":"My Device","rows":3,"cols":5,
+//	  "formats":["png"],"inputs":[{"id":"btn0","type":"button","x":0,"y":0,
+//	  "display":{"image":true,"imageWidth":72,"imageHeight":72,"text":true}},...]}
+//	{"type":"input","id":"btn0","event":"press"}
+//	{"type":"input","id":"btn0","event":"release"}
+//	{"type":"input","id":"dial0","event":"valueInc"}
+//
+// Protocol - server -> client (JSON text frames):
+//
+//	{"type":"ack","status":"ok"}
+//	{"type":"ack","status":"error","reason":"<reason>"}
+//	{"type":"frame","id":"btn0","width":72,"height":72,"data":"<base64>"}
+//	{"type":"label","id":"btn0","text":"Volume"}
+//	{"type":"layoutChange","layoutId":"<id>","layoutName":"<name>"}
 package wsdevice
 
 import (
@@ -23,64 +28,131 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
+	"image/jpeg"
 	"image/png"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	xdraw "golang.org/x/image/draw"
 )
 
+// InputDescriptor holds the declared capabilities of one client input.
+type InputDescriptor struct {
+	ID          string
+	Type        string // "button" or "dial"
+	X, Y        int
+	HasXY       bool
+	Image       bool
+	ImageWidth  int
+	ImageHeight int
+	Text        bool
+	Formats     []string // per-input format override; nil = use device default
+}
+
 // Device implements streamdeck.DeviceIface over a gorilla WebSocket connection.
-// Each connection represents one logical software client device.
+// It is constructed from the hello message sent by the client.
 type Device struct {
-	conn        *websocket.Conn
-	mu          sync.Mutex // serialises writes
-	uuid        string
-	model       streamdeck.Model
-	info        streamdeck.DeviceInfo
+	conn   *websocket.Conn
+	mu     sync.Mutex // serialises writes
+	id     string     // client-provided stable ID
+	name   string
+
+	// Grid geometry derived from the hello message.
+	cols int
+	rows int
+
+	// Ordered input list (index == key slot used by DeviceIface).
+	inputs      []InputDescriptor
+	inputByID   map[string]int   // input ID → key index
+	coordToKey  map[[2]int]int   // [col,row] → key index
+	keyToCoord  map[int][2]int   // key index → [col,row]
+
+	// Image format negotiation: per-input overrides fall back to device level.
+	devFormats   []string          // device-level supported formats
+	inputFormats map[int][]string  // per-input format overrides
+
 	keyEventsCh chan streamdeck.KeyEvent
 	ctx         context.Context
 	cancel      context.CancelFunc
+	info        streamdeck.DeviceInfo
 }
 
-func newDevice(conn *websocket.Conn, uuid string, model streamdeck.Model) *Device {
+// newDevice constructs a Device from a parsed hello message.
+func newDevice(conn *websocket.Conn, h helloMsg) *Device {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	inputs := make([]InputDescriptor, len(h.Inputs))
+	inputByID := make(map[string]int, len(h.Inputs))
+	coordToKey := make(map[[2]int]int)
+	keyToCoord := make(map[int][2]int)
+	inputFormats := make(map[int][]string)
+
+	for i, spec := range h.Inputs {
+		inp := InputDescriptor{
+			ID:          spec.ID,
+			Type:        spec.Type,
+			Image:       spec.Display.Image,
+			ImageWidth:  spec.Display.ImageWidth,
+			ImageHeight: spec.Display.ImageHeight,
+			Text:        spec.Display.Text,
+			Formats:     spec.Display.Formats,
+		}
+		if spec.X != nil && spec.Y != nil {
+			inp.X, inp.Y, inp.HasXY = *spec.X, *spec.Y, true
+			coordToKey[[2]int{inp.X, inp.Y}] = i
+			keyToCoord[i] = [2]int{inp.X, inp.Y}
+		}
+		inputs[i] = inp
+		inputByID[spec.ID] = i
+		if len(spec.Display.Formats) > 0 {
+			inputFormats[i] = spec.Display.Formats
+		}
+	}
+
 	d := &Device{
-		conn:        conn,
-		uuid:        uuid,
-		model:       model,
-		keyEventsCh: make(chan streamdeck.KeyEvent, 64),
-		ctx:         ctx,
-		cancel:      cancel,
+		conn:         conn,
+		id:           h.ID,
+		name:         h.Name,
+		cols:         h.Cols,
+		rows:         h.Rows,
+		inputs:       inputs,
+		inputByID:    inputByID,
+		coordToKey:   coordToKey,
+		keyToCoord:   keyToCoord,
+		devFormats:   h.Formats,
+		inputFormats: inputFormats,
+		keyEventsCh:  make(chan streamdeck.KeyEvent, 64),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 	d.info = streamdeck.DeviceInfo{
 		Path:         "ws://" + conn.RemoteAddr().String(),
-		Serial:       uuid,
+		Serial:       h.ID,
 		Manufacturer: "Riverdeck",
-		Product:      "Virtual Device",
-		Model:        model,
+		Product:      h.Name,
 	}
 	return d
 }
 
-// UUID returns the unique identifier assigned to this software client device.
-func (d *Device) UUID() string { return d.uuid }
+// ID returns the client-provided stable device identifier.
+func (d *Device) ID() string { return d.id }
 
-// Done returns a channel that is closed when the WebSocket connection closes.
+// Done returns a channel closed when the WebSocket connection closes.
 func (d *Device) Done() <-chan struct{} { return d.ctx.Done() }
 
 // Context returns the device's lifecycle context.
 func (d *Device) Context() context.Context { return d.ctx }
 
-// wsInbound is the union of all message types received from a client.
+// wsInbound is the union of all client message types.
 type wsInbound struct {
-	Type    string `json:"type"`
-	Key     int    `json:"key"`
-	Pressed bool   `json:"pressed"`
+	Type  string `json:"type"`
+	ID    string `json:"id"`
+	Event string `json:"event"`
 }
 
 // readLoop reads JSON messages from the WebSocket and routes them.
@@ -96,9 +168,23 @@ func (d *Device) readLoop() {
 		if err := json.Unmarshal(msg, &in); err != nil {
 			continue
 		}
-		if in.Type == "keyevent" {
+		if in.Type == "input" {
+			idx, ok := d.inputByID[in.ID]
+			if !ok {
+				continue
+			}
+			var pressed bool
+			switch in.Event {
+			case "press":
+				pressed = true
+			case "release":
+				pressed = false
+			default:
+				// held, valueInc, valueDec, value — treat as press for now.
+				pressed = true
+			}
 			select {
-			case d.keyEventsCh <- streamdeck.KeyEvent{Key: in.Key, Pressed: in.Pressed}:
+			case d.keyEventsCh <- streamdeck.KeyEvent{Key: idx, Pressed: pressed}:
 			default: // drop if buffer full
 			}
 		}
@@ -114,6 +200,28 @@ func (d *Device) sendJSON(v any) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.conn.WriteMessage(websocket.TextMessage, data)
+}
+
+// chooseFormat returns the image format to use for a given key index.
+// Priority: per-input override → device-level → "png".
+func (d *Device) chooseFormat(keyIndex int) string {
+	if fmts, ok := d.inputFormats[keyIndex]; ok && len(fmts) > 0 {
+		return fmts[0]
+	}
+	if len(d.devFormats) > 0 {
+		return d.devFormats[0]
+	}
+	return "png"
+}
+
+// pixelSizeForKey returns the declared pixel size for an input, falling back to 72.
+func (d *Device) pixelSizeForKey(keyIndex int) int {
+	if keyIndex >= 0 && keyIndex < len(d.inputs) {
+		if d.inputs[keyIndex].ImageWidth > 0 {
+			return d.inputs[keyIndex].ImageWidth
+		}
+	}
+	return 72
 }
 
 // ── DeviceIface ────────────────────────────────────────────────────────────
@@ -136,7 +244,7 @@ func (d *Device) Reset() error {
 }
 
 func (d *Device) SetImage(keyIndex int, img image.Image) error {
-	data, err := d.EncodeKeyImage(img)
+	data, err := d.EncodeKeyImage(keyIndex, img)
 	if err != nil {
 		return err
 	}
@@ -144,39 +252,70 @@ func (d *Device) SetImage(keyIndex int, img image.Image) error {
 }
 
 func (d *Device) SetKeyColor(keyIndex int, c color.Color) error {
-	r, g, b, _ := c.RGBA()
-	return d.sendJSON(map[string]any{
-		"type": "setkeycolor",
-		"key":  keyIndex,
-		"r":    int(r >> 8),
-		"g":    int(g >> 8),
-		"b":    int(b >> 8),
-	})
+	size := d.pixelSizeForKey(keyIndex)
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: c}, image.Point{}, draw.Src)
+	return d.SetImage(keyIndex, img)
 }
 
-// EncodeKeyImage resizes img to the device pixel size and encodes it as PNG.
-// No 180° rotation is applied -- software clients display images as-is.
-func (d *Device) EncodeKeyImage(img image.Image) ([]byte, error) {
-	resized := d.ResizeImage(img)
+// EncodeKeyImage resizes img for the given key's declared dimensions and
+// encodes it in the format that input advertised (or the device default).
+func (d *Device) EncodeKeyImage(keyIndex int, img image.Image) ([]byte, error) {
+	size := d.pixelSizeForKey(keyIndex)
+	resized := d.resizeTo(img, size)
+	format := d.chooseFormat(keyIndex)
+
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, resized); err != nil {
-		return nil, err
+	switch format {
+	case "jpeg", "jpg":
+		if err := jpeg.Encode(&buf, resized, &jpeg.Options{Quality: 90}); err != nil {
+			return nil, fmt.Errorf("jpeg encode: %w", err)
+		}
+	default: // "png" and anything unrecognised
+		if err := png.Encode(&buf, resized); err != nil {
+			return nil, fmt.Errorf("png encode: %w", err)
+		}
 	}
 	return buf.Bytes(), nil
 }
 
-// WriteKeyData sends pre-encoded image bytes as a base64 setimage message.
+// WriteKeyData sends pre-encoded image bytes as a frame message.
 func (d *Device) WriteKeyData(keyIndex int, imageData []byte) error {
+	if keyIndex < 0 || keyIndex >= len(d.inputs) {
+		return fmt.Errorf("key index %d out of range", keyIndex)
+	}
+	inputID := d.inputs[keyIndex].ID
+	size := d.pixelSizeForKey(keyIndex)
 	return d.sendJSON(map[string]any{
-		"type": "setimage",
-		"key":  keyIndex,
-		"data": base64.StdEncoding.EncodeToString(imageData),
+		"type":   "frame",
+		"id":     inputID,
+		"width":  size,
+		"height": size,
+		"data":   base64.StdEncoding.EncodeToString(imageData),
 	})
 }
 
-// ResizeImage scales src to the device pixel size.
+// SetLabel sends a label text update for the given key index.
+func (d *Device) SetLabel(keyIndex int, text string) error {
+	if keyIndex < 0 || keyIndex >= len(d.inputs) {
+		return nil
+	}
+	if !d.inputs[keyIndex].Text {
+		return nil // client didn't declare text support for this input
+	}
+	return d.sendJSON(map[string]any{
+		"type": "label",
+		"id":   d.inputs[keyIndex].ID,
+		"text": text,
+	})
+}
+
+// ResizeImage scales src to the default pixel size (first input's size or 72).
 func (d *Device) ResizeImage(src image.Image) image.Image {
-	size := d.pixelSizeOrDefault()
+	return d.resizeTo(src, d.pixelSizeForKey(0))
+}
+
+func (d *Device) resizeTo(src image.Image, size int) image.Image {
 	b := src.Bounds()
 	if b.Dx() == size && b.Dy() == size {
 		return src
@@ -186,23 +325,14 @@ func (d *Device) ResizeImage(src image.Image) image.Image {
 	return dst
 }
 
-func (d *Device) pixelSizeOrDefault() int {
-	if d.model.PixelSize > 0 {
-		return d.model.PixelSize
-	}
-	return 72
-}
-
 func (d *Device) ReadKeys() ([]bool, error) {
+	keys := make([]bool, len(d.inputs))
 	select {
 	case ev := <-d.keyEventsCh:
-		keys := make([]bool, d.model.Keys)
-		if ev.Key >= 0 && ev.Key < d.model.Keys {
+		if ev.Key >= 0 && ev.Key < len(d.inputs) {
 			keys[ev.Key] = ev.Pressed
 		}
 		return keys, nil
-	case <-time.After(100 * time.Millisecond):
-		return make([]bool, d.model.Keys), nil
 	case <-d.ctx.Done():
 		return nil, d.ctx.Err()
 	}
@@ -247,19 +377,27 @@ func (d *Device) ListenKeys(ctx context.Context, events chan<- streamdeck.KeyEve
 }
 
 func (d *Device) KeyToCoord(keyIndex int) (col, row int) {
-	if d.model.Cols == 0 {
+	if c, ok := d.keyToCoord[keyIndex]; ok {
+		return c[0], c[1]
+	}
+	if d.cols == 0 {
 		return 0, 0
 	}
-	return keyIndex % d.model.Cols, keyIndex / d.model.Cols
+	return keyIndex % d.cols, keyIndex / d.cols
 }
 
 func (d *Device) CoordToKey(col, row int) int {
-	return row*d.model.Cols + col
+	if k, ok := d.coordToKey[[2]int{col, row}]; ok {
+		return k
+	}
+	return row*d.cols + col
 }
 
-func (d *Device) Cols() int                      { return d.model.Cols }
-func (d *Device) Rows() int                      { return d.model.Rows }
-func (d *Device) Keys() int                      { return d.model.Keys }
-func (d *Device) PixelSize() int                 { return d.model.PixelSize }
-func (d *Device) ModelName() string              { return d.model.Name }
+func (d *Device) Cols() int      { return d.cols }
+func (d *Device) Rows() int      { return d.rows }
+func (d *Device) Keys() int      { return len(d.inputs) }
+func (d *Device) PixelSize() int { return d.pixelSizeForKey(0) }
+func (d *Device) ModelName() string {
+	return fmt.Sprintf("%s (%dx%d)", d.name, d.cols, d.rows)
+}
 func (d *Device) GetInfo() streamdeck.DeviceInfo { return d.info }

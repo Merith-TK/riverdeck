@@ -14,20 +14,13 @@ import (
 
 func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	port := req.GetInt("port", 9000)
-	uuid := req.GetString("uuid", "")
 	configDir := req.GetString("config_dir", "")
 	if configDir == "" {
 		configDir = defaultConfigDir()
 	}
 
-	// Auto-resume: if no UUID was explicitly provided, try to load the stored one.
-	resumed := false
-	if uuid == "" {
-		if stored := loadStoredUUID(configDir); stored != "" {
-			uuid = stored
-			resumed = true
-		}
-	}
+	// Allow overriding the device ID for multidevice testing.
+	overrideID := req.GetString("device_id", "")
 
 	state.mu.Lock()
 	if state.connected {
@@ -36,11 +29,13 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	}
 	state.mu.Unlock()
 
-	addr := fmt.Sprintf("ws://localhost:%d/ws", port)
-	if uuid != "" {
-		addr += "?uuid=" + uuid
+	// Load or generate persistent device ID.
+	deviceID := overrideID
+	if deviceID == "" {
+		deviceID = loadOrCreateDeviceID(configDir)
 	}
 
+	addr := fmt.Sprintf("ws://localhost:%d/ws", port)
 	conn, _, err := websocket.DefaultDialer.Dial(addr, nil)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("dial %s: %v", addr, err)), nil
@@ -50,34 +45,57 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	state.conn = conn
 	state.connected = true
 	state.configDir = configDir
+	state.deviceID = deviceID
 	state.keyUpdates = make(map[int]time.Time)
+	state.labels = make(map[int]string)
 	state.messages = nil
-	state.logMsg(fmt.Sprintf("connected to %s", addr))
+	hello := buildHelloMsg(deviceID)
+	state.inputIDs = make([]string, len(hello.Inputs))
+	for i, inp := range hello.Inputs {
+		state.inputIDs[i] = inp.ID
+	}
+	state.logMsg(fmt.Sprintf("connecting to %s as id=%s", addr, deviceID))
 	state.mu.Unlock()
 
-	startReadLoop(conn)
-
-	// Wait briefly for the devinfo handshake.
-	time.Sleep(300 * time.Millisecond)
-
-	state.mu.Lock()
-	uid := state.uuid
-	model := state.modelName
-	cols, rows, keys := state.cols, state.rows, state.keys
-	state.mu.Unlock()
-
-	// Persist the UUID so future sessions auto-resume.
-	storeUUID(configDir, uid)
-
-	resumeNote := ""
-	if resumed {
-		resumeNote = "  (resumed stored session)"
+	// Send hello.
+	if err := sendJSON(hello); err != nil {
+		_ = conn.Close()
+		state.mu.Lock()
+		state.connected = false
+		state.conn = nil
+		state.mu.Unlock()
+		return mcp.NewToolResultError("send hello: " + err.Error()), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf(
-		"Connected.%s\nuuid:  %s\nmodel: %s\ngrid:  %dx%d (%d keys)\nconfigDir: %s",
-		resumeNote, uid, model, cols, rows, keys, configDir,
-	)), nil
+	// Start background reader (handles ack, frame, label, etc.).
+	startReadLoop(conn)
+
+	// Wait for ack (up to 2s).
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state.mu.Lock()
+		msgs := append([]string(nil), state.messages...)
+		state.mu.Unlock()
+		for _, m := range msgs {
+			if strings.Contains(m, "ack: status=ok") {
+				return mcp.NewToolResultText(fmt.Sprintf(
+					"Connected.\ndeviceID: %s\ninputs:   %d\nconfigDir: %s",
+					deviceID, len(hello.Inputs), configDir,
+				)), nil
+			}
+			if strings.Contains(m, "ack: status=error") {
+				_ = conn.Close()
+				state.mu.Lock()
+				state.connected = false
+				state.conn = nil
+				state.mu.Unlock()
+				return mcp.NewToolResultError("server rejected hello: " + m), nil
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	return mcp.NewToolResultError("timeout waiting for ack from server"), nil
 }
 
 func toolDisconnect(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -103,19 +121,30 @@ func toolGetState(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "connected: %v\n", state.connected)
 	if state.connected {
-		fmt.Fprintf(&sb, "uuid:      %s\n", state.uuid)
-		fmt.Fprintf(&sb, "model:     %s\n", state.modelName)
-		fmt.Fprintf(&sb, "grid:      %dx%d (%d keys, %dpx)\n",
-			state.cols, state.rows, state.keys, state.pixelSize)
-		fmt.Fprintf(&sb, "configDir: %s\n", state.configDir)
+		fmt.Fprintf(&sb, "deviceID:   %s\n", state.deviceID)
+		fmt.Fprintf(&sb, "inputs:     %d\n", len(state.inputIDs))
+		fmt.Fprintf(&sb, "brightness: %d%%\n", state.brightness)
+		fmt.Fprintf(&sb, "configDir:  %s\n", state.configDir)
 	}
 
 	if len(state.keyUpdates) > 0 {
-		fmt.Fprintf(&sb, "\nkey images received:")
-		for k := range state.keys {
-			if t, ok := state.keyUpdates[k]; ok {
-				fmt.Fprintf(&sb, "\n  key %2d  last updated %s ago", k, time.Since(t).Round(time.Millisecond))
+		fmt.Fprintf(&sb, "\nframe updates received:")
+		for idx, id := range state.inputIDs {
+			if t, ok := state.keyUpdates[idx]; ok {
+				fmt.Fprintf(&sb, "\n  key %2d (%s)  last updated %s ago",
+					idx, id, time.Since(t).Round(time.Millisecond))
 			}
+		}
+	}
+
+	if len(state.labels) > 0 {
+		fmt.Fprintf(&sb, "\n\ncurrent labels:")
+		for idx, text := range state.labels {
+			inputID := ""
+			if idx < len(state.inputIDs) {
+				inputID = state.inputIDs[idx]
+			}
+			fmt.Fprintf(&sb, "\n  key %2d (%s)  %q", idx, inputID, text)
 		}
 	}
 
@@ -139,68 +168,106 @@ func toolPressKey(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 
 	state.mu.Lock()
 	connected := state.connected
-	keys := state.keys
+	inputIDs := state.inputIDs
 	state.mu.Unlock()
 
 	if !connected {
 		return mcp.NewToolResultError("not connected"), nil
 	}
-	if keys > 0 && (key < 0 || key >= keys) {
-		return mcp.NewToolResultError(fmt.Sprintf("key %d out of range (0-%d)", key, keys-1)), nil
+	if key < 0 || key >= len(inputIDs) {
+		return mcp.NewToolResultError(fmt.Sprintf("key %d out of range (0-%d)", key, len(inputIDs)-1)), nil
 	}
 
-	// Send key-down.
-	if err := sendJSON(map[string]any{"type": "keyevent", "key": key, "pressed": true}); err != nil {
-		return mcp.NewToolResultError("send key-down: " + err.Error()), nil
+	inputID := inputIDs[key]
+
+	// Send press.
+	if err := sendJSON(map[string]any{"type": "input", "id": inputID, "event": "press"}); err != nil {
+		return mcp.NewToolResultError("send press: " + err.Error()), nil
 	}
-	// Brief hold -- mirrors a real button press.
 	time.Sleep(50 * time.Millisecond)
-	// Send key-up.
-	if err := sendJSON(map[string]any{"type": "keyevent", "key": key, "pressed": false}); err != nil {
-		return mcp.NewToolResultError("send key-up: " + err.Error()), nil
+	// Send release.
+	if err := sendJSON(map[string]any{"type": "input", "id": inputID, "event": "release"}); err != nil {
+		return mcp.NewToolResultError("send release: " + err.Error()), nil
 	}
 
-	// Wait for any resulting setimage messages.
+	// Wait briefly for any resulting frame/label messages.
 	time.Sleep(300 * time.Millisecond)
 
 	state.mu.Lock()
 	var updated []string
-	for k := range state.keys {
+	for k := range state.inputIDs {
 		if t, ok := state.keyUpdates[k]; ok && time.Since(t) < 500*time.Millisecond {
-			updated = append(updated, fmt.Sprintf("key %d", k))
+			updated = append(updated, fmt.Sprintf("key %d (%s)", k, state.inputIDs[k]))
+		}
+	}
+	var labelChanges []string
+	for k, text := range state.labels {
+		if t, ok := state.keyUpdates[k]; ok && time.Since(t) < 500*time.Millisecond {
+			labelChanges = append(labelChanges, fmt.Sprintf("key %d: %q", k, text))
 		}
 	}
 	state.mu.Unlock()
 
-	result := fmt.Sprintf("Pressed key %d.", key)
+	result := fmt.Sprintf("Pressed key %d (%s).", key, inputID)
 	if len(updated) > 0 {
-		result += "\nKeys updated after press: " + strings.Join(updated, ", ")
+		result += "\nFrames updated: " + strings.Join(updated, ", ")
+	}
+	if len(labelChanges) > 0 {
+		result += "\nLabels after press: " + strings.Join(labelChanges, "; ")
 	}
 	return mcp.NewToolResultText(result), nil
 }
 
 func toolReadLayout(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	state.mu.Lock()
-	uuid := state.uuid
+	deviceID := state.deviceID
 	configDir := state.configDir
 	connected := state.connected
 	state.mu.Unlock()
 
-	if !connected || uuid == "" {
+	if !connected || deviceID == "" {
 		return mcp.NewToolResultError("not connected (call rd_connect first)"), nil
 	}
 
-	lay, err := layout.LoadForDevice(configDir, uuid)
+	lay, err := layout.LoadForDevice(configDir, deviceID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("load layout from %s: %v", configDir, err)), nil
 	}
 	if lay == nil || len(lay.Pages) == 0 {
-		return mcp.NewToolResultText(fmt.Sprintf("No layout found for uuid=%s in %s", uuid, configDir)), nil
+		return mcp.NewToolResultText(fmt.Sprintf("No layout found for id=%s in %s", deviceID, configDir)), nil
 	}
 
 	data, err := json.MarshalIndent(lay, "", "  ")
 	if err != nil {
 		return mcp.NewToolResultError("marshal layout: " + err.Error()), nil
 	}
-	return mcp.NewToolResultText(fmt.Sprintf("layout for uuid=%s (%s):\n\n%s", uuid, configDir, string(data))), nil
+	return mcp.NewToolResultText(fmt.Sprintf("layout for id=%s (%s):\n\n%s", deviceID, configDir, string(data))), nil
+}
+
+func toolListInputs(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	state.mu.Lock()
+	connected := state.connected
+	inputIDs := append([]string(nil), state.inputIDs...)
+	deviceID := state.deviceID
+	state.mu.Unlock()
+
+	if !connected {
+		return mcp.NewToolResultError("not connected (call rd_connect first)"), nil
+	}
+
+	hello := buildHelloMsg(deviceID)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Inputs declared by this MCP client (id=%s):\n", deviceID)
+	for i, inp := range hello.Inputs {
+		if i >= len(inputIDs) {
+			break
+		}
+		fmt.Fprintf(&sb, "  [%2d] id=%-8s type=%-8s x=%d y=%d image=%v text=%v",
+			i, inp.ID, inp.Type, inp.X, inp.Y, inp.Display.Image, inp.Display.Text)
+		if len(inp.Display.Formats) > 0 {
+			fmt.Fprintf(&sb, " formats=%v", inp.Display.Formats)
+		}
+		fmt.Fprintln(&sb)
+	}
+	return mcp.NewToolResultText(sb.String()), nil
 }

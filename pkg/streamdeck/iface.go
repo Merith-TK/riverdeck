@@ -24,9 +24,10 @@ type DeviceIface interface {
 	// Key images
 	SetImage(keyIndex int, img image.Image) error
 	SetKeyColor(keyIndex int, c color.Color) error
-	EncodeKeyImage(img image.Image) ([]byte, error)
+	EncodeKeyImage(keyIndex int, img image.Image) ([]byte, error)
 	WriteKeyData(keyIndex int, imageData []byte) error
 	ResizeImage(src image.Image) image.Image
+	SetLabel(keyIndex int, text string) error
 
 	// Key input
 	ReadKeys() ([]bool, error)

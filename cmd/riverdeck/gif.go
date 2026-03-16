@@ -57,7 +57,7 @@ func (a *App) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
 		if text != "" {
 			resized = a.nav.RenderTextOnImage(resized, text, textColor)
 		}
-		enc, err := a.device.EncodeKeyImage(resized)
+		enc, err := a.device.EncodeKeyImage(keyIndex, resized)
 		if err != nil {
 			log.Printf("GIF pre-encode frame %d for key %d: %v", i, keyIndex, err)
 			return

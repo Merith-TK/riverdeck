@@ -271,21 +271,14 @@ func (a *App) Init(configDir string, simAddr string) error {
 	if a.config.Network.WebSocketEnabled {
 		style := a.config.UI.NavigationStyle
 		if style == "layout" || style == "auto" {
-			wsModel := streamdeck.Model{
-				Name:        "Virtual Device",
-				Cols:        5,
-				Rows:        3,
-				Keys:        15,
-				PixelSize:   72,
-				ImageFormat: "JPEG",
-			}
 			port := a.config.Network.WebSocketPort
 			if port == 0 {
 				port = 9000
 			}
-			a.wsServer = wsdevice.NewServer(port, wsModel, func(wsDev *wsdevice.Device) {
+			a.wsServer = wsdevice.NewServer(port, func(wsDev *wsdevice.Device) {
 				a.runWSDevice(wsDev)
 			})
+			a.wsServer.SetBrightness(a.config.Application.Brightness)
 			if startErr := a.wsServer.Start(a.ctx); startErr != nil {
 				log.Printf("[!] WS device server failed to start: %v", startErr)
 			} else {

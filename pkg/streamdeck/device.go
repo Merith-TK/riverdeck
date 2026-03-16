@@ -182,15 +182,22 @@ func (d *Device) SetImage(keyIndex int, img image.Image) error {
 // EncodeKeyImage prepares and encodes an image for a key without holding the HID lock.
 // Use together with WriteKeyData for parallel page rendering:
 //
-//	data, err := dev.EncodeKeyImage(img)   // concurrent-safe, no lock
-//	dev.WriteKeyData(keyIndex, data)        // serialised HID write
-func (d *Device) EncodeKeyImage(img image.Image) ([]byte, error) {
+//	data, err := dev.EncodeKeyImage(keyIndex, img)   // concurrent-safe, no lock
+//	dev.WriteKeyData(keyIndex, data)                  // serialised HID write
+//
+// keyIndex is accepted for interface compatibility but is not used by hardware
+// devices (all keys share the same encoding format).
+func (d *Device) EncodeKeyImage(_ int, img image.Image) ([]byte, error) {
 	if d.Model.PixelSize == 0 {
 		return nil, fmt.Errorf("device does not support images")
 	}
 	prepared := d.prepareImage(img)
 	return d.encodeImage(prepared)
 }
+
+// SetLabel is a no-op for hardware Stream Deck devices; labels are rendered
+// into the key image by the navigator and pushed via SetImage/WriteKeyData.
+func (d *Device) SetLabel(_ int, _ string) error { return nil }
 
 // WriteKeyData writes pre-encoded image bytes to a key with the HID lock held.
 // Pair with EncodeKeyImage for parallel encode -> serial write patterns.

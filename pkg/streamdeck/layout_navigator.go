@@ -229,7 +229,7 @@ func (n *LayoutNavigator) RenderPage() error {
 			if img == nil {
 				img = blackImg
 			}
-			data, err := n.dev.EncodeKeyImage(img)
+			data, err := n.dev.EncodeKeyImage(i, img)
 			frames[i] = frame{index: i, data: data, err: err}
 		}()
 	}
@@ -243,6 +243,15 @@ func (n *LayoutNavigator) RenderPage() error {
 			return fmt.Errorf("write key %d: %w", f.index, err)
 		}
 	}
+
+	// Send label text for each button that has one (no-op for hardware/sim).
+	for i := range lp.Buttons {
+		btn := &lp.Buttons[i]
+		if btn.Slot >= 0 && btn.Slot < totalKeys && btn.Label != "" {
+			_ = n.dev.SetLabel(btn.Slot, btn.Label)
+		}
+	}
+
 	return nil
 }
 

@@ -173,7 +173,7 @@ func (sc *SimClient) Reset() error {
 }
 
 func (sc *SimClient) SetImage(keyIndex int, img image.Image) error {
-	data, err := sc.EncodeKeyImage(img)
+	data, err := sc.EncodeKeyImage(keyIndex, img)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,8 @@ func (sc *SimClient) SetKeyColor(keyIndex int, c color.Color) error {
 // EncodeKeyImage resizes img to the device pixel size and encodes it as PNG.
 // Unlike the real Device, no 180° rotation is applied -- the simulator shows
 // images exactly as the script author intended.
-func (sc *SimClient) EncodeKeyImage(img image.Image) ([]byte, error) {
+// keyIndex is accepted for interface compatibility but is not used by SimClient.
+func (sc *SimClient) EncodeKeyImage(_ int, img image.Image) ([]byte, error) {
 	size := sc.pixelSizeOrDefault()
 	resized := sc.resizeTo(img, size)
 	var buf bytes.Buffer
@@ -203,6 +204,9 @@ func (sc *SimClient) EncodeKeyImage(img image.Image) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// SetLabel is a no-op for SimClient; labels are baked into the key image.
+func (sc *SimClient) SetLabel(_ int, _ string) error { return nil }
 
 // WriteKeyData sends pre-encoded image bytes (PNG from EncodeKeyImage) to the
 // simulator as a base64-encoded setimage message.

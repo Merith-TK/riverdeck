@@ -2,44 +2,44 @@ package wsdevice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"sync"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 )
 
-// ConnectFunc is invoked for each new WebSocket device connection.
-// It is called in the HTTP server's goroutine for that connection and should
-// block until the session is done (i.e. run the device event loop).
+// ConnectFunc is invoked for each successfully handshaked WebSocket device.
+// It runs in its own goroutine and must block until the session is done.
 type ConnectFunc func(dev *Device)
 
 var upgrader = websocket.Upgrader{
-	// Allow all origins so web apps on any domain can connect.
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 // Server manages WebSocket connections from software client devices.
-// Each connection is upgraded to WebSocket, assigned a UUID, and wrapped in a
-// Device that implements streamdeck.DeviceIface.
+// Multiple simultaneous clients are supported; each must provide a stable
+// unique ID in the hello message.
 type Server struct {
-	model      streamdeck.Model
 	onConnect  ConnectFunc
 	httpServer *http.Server
+	brightness int // current brightness sent to clients in the ack
+
+	mu      sync.Mutex
+	devices map[string]*Device // id → active device
 }
 
-// NewServer creates a WebSocket device server.
-//
-//   - port:      TCP port to listen on (e.g. 9000).
-//   - model:     Virtual device geometry served to all connected clients.
-//   - onConnect: Called once per connection; receives a fully initialised Device.
-func NewServer(port int, model streamdeck.Model, fn ConnectFunc) *Server {
+// NewServer creates a WebSocket device server listening on port.
+// fn is called once per connection after a successful hello/ack handshake.
+func NewServer(port int, fn ConnectFunc) *Server {
 	s := &Server{
-		model:     model,
-		onConnect: fn,
+		onConnect:  fn,
+		devices:    make(map[string]*Device),
+		brightness: 75, // sensible default
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.serveWS)
@@ -50,9 +50,17 @@ func NewServer(port int, model streamdeck.Model, fn ConnectFunc) *Server {
 	return s
 }
 
+// SetBrightness stores the current brightness level so it can be included in
+// the ack handshake for newly connecting clients.  Call this whenever the
+// application brightness changes.
+func (s *Server) SetBrightness(percent int) {
+	s.mu.Lock()
+	s.brightness = percent
+	s.mu.Unlock()
+}
+
 // Start begins listening for WebSocket connections in the background.
-// The listener shuts down when ctx is cancelled.
-// Returns an error only if the TCP listener cannot be bound.
+// The server shuts down when ctx is cancelled.
 func (s *Server) Start(ctx context.Context) error {
 	ln, err := net.Listen("tcp", s.httpServer.Addr)
 	if err != nil {
@@ -70,8 +78,45 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// serveWS handles the HTTP -> WebSocket upgrade and drives a Device session.
-// It honours an optional ?uuid= query parameter so clients can resume sessions.
+// ── hello / ack message types ─────────────────────────────────────────────
+
+type helloMsg struct {
+	Type    string      `json:"type"`
+	ID      string      `json:"id"`
+	Name    string      `json:"name"`
+	Rows    int         `json:"rows"`
+	Cols    int         `json:"cols"`
+	Formats []string    `json:"formats"`
+	Inputs  []inputSpec `json:"inputs"`
+}
+
+type inputSpec struct {
+	ID      string      `json:"id"`
+	Type    string      `json:"type"`
+	X       *int        `json:"x"`
+	Y       *int        `json:"y"`
+	Display displaySpec `json:"display"`
+}
+
+type displaySpec struct {
+	Image       bool     `json:"image"`
+	ImageWidth  int      `json:"imageWidth"`
+	ImageHeight int      `json:"imageHeight"`
+	Text        bool     `json:"text"`
+	Formats     []string `json:"formats"`
+}
+
+func sendAck(conn *websocket.Conn, status, reason string, brightness int) {
+	msg := map[string]any{"type": "ack", "status": status, "brightness": brightness}
+	if reason != "" {
+		msg["reason"] = reason
+	}
+	data, _ := json.Marshal(msg)
+	_ = conn.WriteMessage(websocket.TextMessage, data)
+}
+
+// serveWS upgrades the connection, runs the hello/ack handshake, then drives
+// the device session.
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -79,35 +124,89 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use client-supplied UUID for session resumption; otherwise generate a new one.
-	id := r.URL.Query().Get("uuid")
-	if id == "" {
-		id = uuid.New().String()
+	// ── Keepalive: extend read deadline on each pong. ──────────────────────
+	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+		return nil
+	})
+
+	// ── Hello handshake (10 s timeout). ───────────────────────────────────
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("[wsdevice] read hello error: %v", err)
+		_ = conn.Close()
+		return
 	}
+	// Restore the keepalive deadline after reading hello.
+	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 
-	dev := newDevice(conn, id, s.model)
-
-	// Send the devinfo handshake immediately so the client knows its identity and
-	// the grid geometry before any images arrive.
-	if err := dev.sendJSON(map[string]any{
-		"type":       "devinfo",
-		"uuid":       id,
-		"cols":       s.model.Cols,
-		"rows":       s.model.Rows,
-		"keys":       s.model.Keys,
-		"pixel_size": s.model.PixelSize,
-		"model_name": s.model.Name,
-	}); err != nil {
-		log.Printf("[wsdevice] devinfo send error uuid=%s: %v", id, err)
+	var hello helloMsg
+	if err := json.Unmarshal(raw, &hello); err != nil {
+		sendAck(conn, "error", "invalid hello JSON", 0)
+		_ = conn.Close()
+		return
+	}
+	if hello.Type != "hello" {
+		sendAck(conn, "error", "expected hello message", 0)
+		_ = conn.Close()
+		return
+	}
+	if hello.ID == "" || hello.Name == "" || hello.Rows == 0 || hello.Cols == 0 || len(hello.Inputs) == 0 {
+		sendAck(conn, "error", "missing required hello fields: id, name, rows, cols, inputs", 0)
 		_ = conn.Close()
 		return
 	}
 
-	log.Printf("[wsdevice] client connected uuid=%s addr=%s", id, conn.RemoteAddr())
+	// ── Duplicate detection. ───────────────────────────────────────────────
+	s.mu.Lock()
+	if _, exists := s.devices[hello.ID]; exists {
+		s.mu.Unlock()
+		sendAck(conn, "error", "Device already connected", 0)
+		log.Printf("[wsdevice] rejected duplicate connection for id=%s addr=%s", hello.ID, conn.RemoteAddr())
+		_ = conn.Close()
+		return
+	}
+	dev := newDevice(conn, hello)
+	s.devices[hello.ID] = dev
+	brightness := s.brightness
+	s.mu.Unlock()
 
-	// readLoop populates keyEventsCh and cancels the device context on close.
+	defer func() {
+		s.mu.Lock()
+		delete(s.devices, hello.ID)
+		s.mu.Unlock()
+	}()
+
+	sendAck(conn, "ok", "", brightness)
+	log.Printf("[wsdevice] client connected id=%s name=%q addr=%s inputs=%d",
+		hello.ID, hello.Name, conn.RemoteAddr(), len(hello.Inputs))
+
+	// ── Start keepalive ping loop. ─────────────────────────────────────────
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-dev.ctx.Done():
+				return
+			case <-ticker.C:
+				dev.mu.Lock()
+				err := conn.WriteMessage(websocket.PingMessage, nil)
+				dev.mu.Unlock()
+				if err != nil {
+					dev.cancel()
+					return
+				}
+			}
+		}
+	}()
+
+	// ── readLoop populates keyEventsCh and cancels on close. ──────────────
 	go dev.readLoop()
 
-	// onConnect drives the layout session; it blocks until the session ends.
+	// ── onConnect drives the layout session (blocks until disconnect). ─────
 	s.onConnect(dev)
+	log.Printf("[wsdevice] client disconnected id=%s", hello.ID)
 }

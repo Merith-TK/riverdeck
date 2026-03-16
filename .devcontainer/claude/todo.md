@@ -1,24 +1,20 @@
-# Session Summary — 2026-03-16 (continued)
+# Session — WS Protocol Redesign
 
 ## Completed
-- [x] Unified layout.json format: `{"layouts": {"default": {...}}, "devices": {"id": "name"}}`
-- [x] `pkg/layout/types.go` — added `LayoutFile` struct
-- [x] `pkg/layout/layout.go` — new API: `LoadFile`, `LoadForDevice`, `SaveLayout`; removed `Load`, `Save`, `DeviceLayoutDir`
-- [x] `cmd/riverdeck/editor.go` — `createNavigator` uses `LoadForDevice(dir, dev.GetInfo().Serial)`
-- [x] `cmd/riverdeck/wsdevice.go` — simplified: removed per-device dir seeding; just `LoadForDevice`
-- [x] `pkg/editorserver/server.go` — uses `LoadForDevice`; added `layoutName` field
-- [x] `pkg/editorserver/handler_layout.go` — uses `SaveLayout(configDir, layoutName, lay)`
-- [x] `cmd/mcp-wsdevice/tools.go` — `rd_read_layout` fixed: uses `LoadForDevice(configDir, uuid)` directly
-- [x] `.riverdeck/layout.json` — migrated to new format
-- [x] `go build ./pkg/... ./cmd/...` clean
+- [x] 1. `pkg/streamdeck/iface.go` — add `SetLabel`, change `EncodeKeyImage(keyIndex, img)`
+- [x] 2. `pkg/streamdeck/device.go` — stub `SetLabel`, update `EncodeKeyImage` sig
+- [x] 3. `pkg/streamdeck/simclient.go` — same stubs
+- [x] 4. `pkg/streamdeck/layout_navigator.go` — pass keyIndex to `EncodeKeyImage`; send `SetLabel` after render
+- [x] 5. `pkg/streamdeck/navigation.go` — pass keyIndex to `EncodeKeyImage` (folder navigator)
+- [x] 6. `cmd/riverdeck/gif.go` — pass keyIndex to `EncodeKeyImage`
+- [x] 7. `pkg/wsdevice/device.go` — full rewrite: hello-driven, format negotiation, label, ping/pong
+- [x] 8. `pkg/wsdevice/server.go` — full rewrite: multi-device, hello/ack, duplicate rejection, keepalive
+- [x] 9. `cmd/riverdeck/app.go` — remove hardcoded wsModel from NewServer call
+- [x] 10. `cmd/riverdeck/wsdevice.go` — UUID() → ID()
+- [x] 11. `cmd/mcp-wsdevice/state.go` — persistent device ID, hello/ack/frame/label handling
+- [x] 12. `cmd/mcp-wsdevice/tools.go` — send hello, `input` events, labels in state, rd_list_inputs
+- [x] 13. `cmd/mcp-wsdevice/main.go` — add rd_list_inputs tool registration
+- [x] 14. `mage build` — clean
 
-## Outstanding / Next Session
-
-### Not yet implemented
-- Script execution for WS clients (`runWSDevice` logs path but doesn't run scripts)
-- Hardware device layout migration to per-device dir was dropped in favour of the new unified format
-
-### Testing
-- Run: `go run ./cmd/riverdeck/ -configdir .riverdeck`
-- Connect via MCP: `rd_connect(port=9000, config_dir="/workspace/github.com/Merith-TK/riverdeck/.riverdeck")`
-- `rd_read_layout` should now return the layout from the unified layout.json
+## Outstanding
+- [ ] End-to-end test via MCP tools (requires Claude Code restart to reload mcp-wsdevice)

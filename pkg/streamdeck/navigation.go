@@ -417,7 +417,7 @@ func (n *Navigator) RenderPage() error {
 			if img == nil {
 				img = blackImg
 			}
-			data, err := n.dev.EncodeKeyImage(img)
+			data, err := n.dev.EncodeKeyImage(i, img)
 			frames[i].data = data
 			frames[i].err = err
 		}()
