@@ -52,7 +52,7 @@
 - **Task tracking**: `.devcontainer/claude/todo.md`
 - **Lessons / notes**: `.devcontainer/claude/notes.md`
 - **MCP server config**: `.mcp.json` at project root
-- **Auto-memory**: `~/.claude/projects/-workspace-github-com-Merith-TK-riverdeck/memory/` — do NOT place memory files inside the project directory
+- **Auto-memory**: `~/.claude/projects/-workspace-github-com-Merith-TK-riverdeck/memory/` -- do NOT place memory files inside the project directory
 
 ## Core Principles
 

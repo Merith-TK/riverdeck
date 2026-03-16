@@ -101,7 +101,7 @@ type Layout struct {
 }
 
 // LayoutFile is the top-level structure stored as layout.json.
-// It holds named layout definitions and an optional device→layout mapping.
+// It holds named layout definitions and an optional device->layout mapping.
 //
 // Example:
 //

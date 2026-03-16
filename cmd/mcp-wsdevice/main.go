@@ -30,7 +30,7 @@ func main() {
 	)
 
 	s.AddTool(mcp.NewTool("rd_connect",
-		mcp.WithDescription("Connect to the riverdeck WebSocket device server, send a hello handshake declaring a 5×3 button grid, and wait for ack. The device ID is persisted in .mcp-device-id so the same identity is reused across sessions."),
+		mcp.WithDescription("Connect to the riverdeck WebSocket device server, send a hello handshake declaring a 5x3 button grid, and wait for ack. The device ID is persisted in .mcp-device-id so the same identity is reused across sessions."),
 		mcp.WithNumber("port",
 			mcp.Description("TCP port the riverdeck WS server is listening on (default 9000)"),
 		),

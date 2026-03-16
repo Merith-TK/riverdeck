@@ -8,13 +8,13 @@ This means someone can make their own device driver for hardware not yet support
 - A Raspberry Pi with GPIO buttons wired up as inputs
 - A Stream Deck plugin bridging into RiverDeck
 
-Websocket client devices only support **layout mode** — folder mode is not supported.
+Websocket client devices only support **layout mode** -- folder mode is not supported.
 
 ---
 
 ## Connection Lifecycle
 
-### 1. Handshake (Client → RiverDeck)
+### 1. Handshake (Client -> RiverDeck)
 
 Immediately upon connecting, the client MUST send a `hello` message declaring its identity and capabilities. This is the minimum required payload:
 
@@ -113,7 +113,7 @@ If something is wrong with the handshake, RiverDeck will reply with:
 }
 ```
 
-After `ack`, RiverDeck will begin pushing the current layout state to the device (see **RiverDeck → Client messages** below).
+After `ack`, RiverDeck will begin pushing the current layout state to the device (see **RiverDeck -> Client messages** below).
 
 ---
 
@@ -129,11 +129,11 @@ When a websocket client device disconnects:
 - RiverDeck retains the device's layout config in memory and on disk (same as any multidevice config).
 - The device is marked as **offline** in the UI.
 - RiverDeck does **not** queue any outbound data for the device while it is offline. When the device reconnects and completes the handshake, RiverDeck will push a fresh full state.
-- Nothing prevents third-party addons from implementing their own queuing on top of this — but the core RiverDeck behaviour is fire-and-forget, no queuing.
+- Nothing prevents third-party addons from implementing their own queuing on top of this -- but the core RiverDeck behaviour is fire-and-forget, no queuing.
 
 ---
 
-## Messages: Client → RiverDeck
+## Messages: Client -> RiverDeck
 
 ### Button Events
 
@@ -229,7 +229,7 @@ Dials also support absolute value reporting:
 
 ---
 
-## Messages: RiverDeck → Client
+## Messages: RiverDeck -> Client
 
 RiverDeck uses the same frame-diffing logic it uses for real hardware devices: it renders a frame per input, compares it to the last-sent frame for that input, and only pushes an update if the frame changed.
 
@@ -247,7 +247,7 @@ Sent when an input's rendered image frame changes. Only sent to inputs that decl
 }
 ```
 
-The image data is raw pixel bytes (format TBD by implementation — recommend RGBA or JPEG). Resolution matches the `imageWidth`/`imageHeight` the client declared for this input.
+The image data is raw pixel bytes (format TBD by implementation -- recommend RGBA or JPEG). Resolution matches the `imageWidth`/`imageHeight` the client declared for this input.
 
 ### Label Text
 
@@ -279,9 +279,9 @@ After a `layoutChange`, RiverDeck will push fresh `frame` and `label` updates fo
 
 ## Implementation Notes for Claude Code
 
-- The device `id` is the stable key used to look up saved config. Treat it like a serial number — it must survive process restarts on the client side.
+- The device `id` is the stable key used to look up saved config. Treat it like a serial number -- it must survive process restarts on the client side.
 - The existing multidevice config persistence path should be reused/extended to support websocket client devices. The device type should be tagged (e.g. `"source": "websocket"`) so it can be distinguished from real hardware.
 - The websocket server should handle multiple simultaneous websocket client devices.
 - If two clients connect with the same `id`, the behaviour should be: reject the second connection with an error, or disconnect the first and accept the second (preference: reject second, log a warning).
-- Layout mode only — if a websocket client device somehow ends up in a folder-mode context, it should be treated as an error and the device should be put in an error/offline state.
+- Layout mode only -- if a websocket client device somehow ends up in a folder-mode context, it should be treated as an error and the device should be put in an error/offline state.
 - The layout editor should use the XY coordinates from the `hello` message to render the device's physical layout accurately, including non-rectangular or sparse layouts (e.g. a Raspberry Pi with GPIO buttons not arranged in a perfect grid).

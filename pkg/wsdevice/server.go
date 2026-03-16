@@ -30,7 +30,7 @@ type Server struct {
 	brightness int // current brightness sent to clients in the ack
 
 	mu      sync.Mutex
-	devices map[string]*Device // id → active device
+	devices map[string]*Device // id -> active device
 }
 
 // NewServer creates a WebSocket device server listening on port.
@@ -76,34 +76,6 @@ func (s *Server) Start(ctx context.Context) error {
 		_ = s.httpServer.Close()
 	}()
 	return nil
-}
-
-// ── hello / ack message types ─────────────────────────────────────────────
-
-type helloMsg struct {
-	Type    string      `json:"type"`
-	ID      string      `json:"id"`
-	Name    string      `json:"name"`
-	Rows    int         `json:"rows"`
-	Cols    int         `json:"cols"`
-	Formats []string    `json:"formats"`
-	Inputs  []inputSpec `json:"inputs"`
-}
-
-type inputSpec struct {
-	ID      string      `json:"id"`
-	Type    string      `json:"type"`
-	X       *int        `json:"x"`
-	Y       *int        `json:"y"`
-	Display displaySpec `json:"display"`
-}
-
-type displaySpec struct {
-	Image       bool     `json:"image"`
-	ImageWidth  int      `json:"imageWidth"`
-	ImageHeight int      `json:"imageHeight"`
-	Text        bool     `json:"text"`
-	Formats     []string `json:"formats"`
 }
 
 func sendAck(conn *websocket.Conn, status, reason string, brightness int) {

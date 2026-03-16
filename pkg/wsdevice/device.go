@@ -41,40 +41,27 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
-// InputDescriptor holds the declared capabilities of one client input.
-type InputDescriptor struct {
-	ID          string
-	Type        string // "button" or "dial"
-	X, Y        int
-	HasXY       bool
-	Image       bool
-	ImageWidth  int
-	ImageHeight int
-	Text        bool
-	Formats     []string // per-input format override; nil = use device default
-}
-
 // Device implements streamdeck.DeviceIface over a gorilla WebSocket connection.
 // It is constructed from the hello message sent by the client.
 type Device struct {
-	conn   *websocket.Conn
-	mu     sync.Mutex // serialises writes
-	id     string     // client-provided stable ID
-	name   string
+	conn *websocket.Conn
+	mu   sync.Mutex // serialises writes
+	id   string     // client-provided stable ID
+	name string
 
 	// Grid geometry derived from the hello message.
 	cols int
 	rows int
 
 	// Ordered input list (index == key slot used by DeviceIface).
-	inputs      []InputDescriptor
-	inputByID   map[string]int   // input ID → key index
-	coordToKey  map[[2]int]int   // [col,row] → key index
-	keyToCoord  map[int][2]int   // key index → [col,row]
+	inputs     []InputDescriptor
+	inputByID  map[string]int // input ID -> key index
+	coordToKey map[[2]int]int // [col,row] -> key index
+	keyToCoord map[int][2]int // key index -> [col,row]
 
 	// Image format negotiation: per-input overrides fall back to device level.
-	devFormats   []string          // device-level supported formats
-	inputFormats map[int][]string  // per-input format overrides
+	devFormats   []string         // device-level supported formats
+	inputFormats map[int][]string // per-input format overrides
 
 	keyEventsCh chan streamdeck.KeyEvent
 	ctx         context.Context
@@ -148,13 +135,6 @@ func (d *Device) Done() <-chan struct{} { return d.ctx.Done() }
 // Context returns the device's lifecycle context.
 func (d *Device) Context() context.Context { return d.ctx }
 
-// wsInbound is the union of all client message types.
-type wsInbound struct {
-	Type  string `json:"type"`
-	ID    string `json:"id"`
-	Event string `json:"event"`
-}
-
 // readLoop reads JSON messages from the WebSocket and routes them.
 // It cancels the device context when the connection closes.
 func (d *Device) readLoop() {
@@ -180,7 +160,7 @@ func (d *Device) readLoop() {
 			case "release":
 				pressed = false
 			default:
-				// held, valueInc, valueDec, value — treat as press for now.
+				// held, valueInc, valueDec, value -- treat as press for now.
 				pressed = true
 			}
 			select {
@@ -203,7 +183,7 @@ func (d *Device) sendJSON(v any) error {
 }
 
 // chooseFormat returns the image format to use for a given key index.
-// Priority: per-input override → device-level → "png".
+// Priority: per-input override -> device-level -> "png".
 func (d *Device) chooseFormat(keyIndex int) string {
 	if fmts, ok := d.inputFormats[keyIndex]; ok && len(fmts) > 0 {
 		return fmts[0]
