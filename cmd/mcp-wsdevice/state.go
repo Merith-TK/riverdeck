@@ -32,6 +32,9 @@ type deviceState struct {
 	// Per-key last-update timestamps (populated when frame arrives).
 	keyUpdates map[int]time.Time
 
+	// Per-key raw base64 image data from the most recent frame message.
+	frameData map[int]string
+
 	// Human-readable log of the last 30 events.
 	messages []string
 }
@@ -39,6 +42,7 @@ type deviceState struct {
 var state = &deviceState{
 	keyUpdates: make(map[int]time.Time),
 	labels:     make(map[int]string),
+	frameData:  make(map[int]string),
 }
 
 func (s *deviceState) logMsg(msg string) {

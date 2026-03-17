@@ -41,7 +41,6 @@ import (
 // App represents the main application.
 type App struct {
 	device     streamdeck.DeviceIface
-	simMode    bool // true when connected to simulator (no HID init)
 	scriptMgr  *scripting.ScriptManager
 	nav        streamdeck.NavigatorIface
 	config     *Config
@@ -92,17 +91,14 @@ func NewApp() *App {
 // Init initializes the application, including device discovery and setup.
 // It performs the following steps:
 // 1. Initializes the Stream Deck library
-// 2. Enumerates available devices (or connects to a simulator)
+// 2. Enumerates available devices
 // 3. Opens the device and sets initial brightness
 // 4. Creates the config directory structure
 // 5. Initializes the script manager and navigator
 // 6. Sets up key update callbacks and passive loops
 //
-// When simAddr is non-empty ("host:port") the app connects to a running
-// riverdeck-simulator instance instead of opening real HID hardware.
-//
 // Returns an error if initialization fails at any step.
-func (a *App) Init(configDir string, simAddr string) error {
+func (a *App) Init(configDir string) error {
 	// Resolve the single canonical config directory.
 	dir := ConfigDir(configDir)
 	absDir, err := filepath.Abs(dir)
@@ -122,68 +118,49 @@ func (a *App) Init(configDir string, simAddr string) error {
 	log.Printf("[*] Config directory: %s", absDir)
 	log.Printf("[*] Configuration loaded")
 
-	// Open device: real hardware or simulator.
-	var dev streamdeck.DeviceIface
-	if simAddr != "" {
-		log.Printf("[*] Simulator mode: connecting to %s ...", simAddr)
-		sc, err := streamdeck.ConnectSim(simAddr)
-		if err != nil {
-			return fmt.Errorf("failed to connect to simulator: %w", err)
-		}
-		dev = sc
-		a.simMode = true
-		log.Printf("[*] Simulator ready: %s (%dx%d, %d keys)",
-			sc.ModelName(), sc.Cols(), sc.Rows(), sc.Keys())
-	} else {
-		// Initialize the streamdeck library
-		if err := streamdeck.Init(); err != nil {
-			return fmt.Errorf("failed to init streamdeck: %w", err)
-		}
-
-		// Probe for all Stream Deck devices
-		log.Println("[*] Scanning for Stream Deck devices...")
-
-		devices, err := streamdeck.Enumerate()
-		if err != nil {
-			return fmt.Errorf("failed to enumerate devices: %w", err)
-		}
-
-		if len(devices) == 0 {
-			fmt.Println("No Stream Deck devices found.")
-			return fmt.Errorf("no devices found")
-		}
-
-		fmt.Printf("Found %d Stream Deck device(s):\n\n", len(devices))
-
-		for i, info := range devices {
-			fmt.Printf("Device #%d:\n", i+1)
-			streamdeck.PrintDeviceInfo(info)
-			fmt.Println()
-		}
-
-		// Use the first device
-		info := devices[0]
-		if info.Model.PixelSize == 0 {
-			fmt.Println("First device has no display (e.g., Pedal). Skipping.")
-			return fmt.Errorf("device has no display")
-		}
-
-		fmt.Printf("Opening %s...\n", info.Model.Name)
-
-		hwDev, err := streamdeck.OpenWithConfig(info.Path, a.config.Performance.JPEGQuality)
-		if err != nil {
-			return fmt.Errorf("failed to open device: %w", err)
-		}
-		dev = hwDev
+	// Initialize the streamdeck library.
+	if err := streamdeck.Init(); err != nil {
+		return fmt.Errorf("failed to init streamdeck: %w", err)
 	}
-	a.device = dev
+
+	log.Println("[*] Scanning for Stream Deck devices...")
+
+	devices, err := streamdeck.Enumerate()
+	if err != nil {
+		return fmt.Errorf("failed to enumerate devices: %w", err)
+	}
+
+	if len(devices) == 0 {
+		fmt.Println("No Stream Deck devices found.")
+		return fmt.Errorf("no devices found")
+	}
+
+	fmt.Printf("Found %d Stream Deck device(s):\n\n", len(devices))
+	for i, info := range devices {
+		fmt.Printf("Device #%d:\n", i+1)
+		streamdeck.PrintDeviceInfo(info)
+		fmt.Println()
+	}
+
+	info := devices[0]
+	if info.Model.PixelSize == 0 {
+		fmt.Println("First device has no display (e.g., Pedal). Skipping.")
+		return fmt.Errorf("device has no display")
+	}
+
+	fmt.Printf("Opening %s...\n", info.Model.Name)
+	hwDev, err := streamdeck.OpenWithConfig(info.Path, a.config.Performance.JPEGQuality)
+	if err != nil {
+		return fmt.Errorf("failed to open device: %w", err)
+	}
+	a.device = hwDev
 
 	// Compute the emergency kill combo from device geometry.
 	// Use all 4 corners + center, deduplicated (small devices may share keys).
 	// Require at least 3 distinct keys to form a meaningful combo.
 	{
-		cols := dev.Cols()
-		rows := dev.Rows()
+		cols := hwDev.Cols()
+		rows := hwDev.Rows()
 		centerRow := rows / 2
 		centerCol := cols / 2
 		candidates := []int{
@@ -210,7 +187,7 @@ func (a *App) Init(configDir string, simAddr string) error {
 	}
 
 	// Set brightness from config
-	if err := dev.SetBrightness(a.config.Application.Brightness); err != nil {
+	if err := hwDev.SetBrightness(a.config.Application.Brightness); err != nil {
 		log.Printf("SetBrightness failed: %v", err)
 	}
 
@@ -245,7 +222,7 @@ func (a *App) Init(configDir string, simAddr string) error {
 
 	// Create script manager and boot (loads scripts, starts background workers)
 	log.Println("[*] Booting script manager...")
-	a.scriptMgr = scripting.NewScriptManager(dev, absDir, a.config.Application.PassiveFPS)
+	a.scriptMgr = scripting.NewScriptManager(a.device, absDir, a.config.Application.PassiveFPS)
 
 	// Create a context for the entire application
 	a.ctx, a.cancel = context.WithCancel(context.Background())
@@ -256,7 +233,7 @@ func (a *App) Init(configDir string, simAddr string) error {
 	}
 
 	// Create navigator based on the configured navigation style.
-	a.nav = a.createNavigator(dev, absDir)
+	a.nav = a.createNavigator(a.device, absDir)
 	a.nav.SetScriptValidator(a.scriptMgr.IsUsableScript)
 
 	// Set up passive key updates from scripts
@@ -474,7 +451,5 @@ func (a *App) Shutdown() {
 		_ = a.device.Clear()
 		a.device.Close()
 	}
-	if !a.simMode {
-		streamdeck.Exit()
-	}
+	streamdeck.Exit()
 }

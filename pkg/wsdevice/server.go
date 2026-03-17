@@ -164,9 +164,8 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 			case <-dev.ctx.Done():
 				return
 			case <-ticker.C:
-				dev.mu.Lock()
-				err := conn.WriteMessage(websocket.PingMessage, nil)
-				dev.mu.Unlock()
+				// WriteControl is safe to call concurrently with data writes.
+				err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
 				if err != nil {
 					dev.cancel()
 					return

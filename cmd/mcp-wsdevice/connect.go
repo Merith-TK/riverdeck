@@ -65,7 +65,7 @@ func buildHelloMsg(deviceID string) helloMsg {
 	const (
 		rows      = 3
 		cols      = 5
-		pixelSize = 72
+		pixelSize = 64
 	)
 	inputs := make([]helloInput, rows*cols)
 	for row := 0; row < rows; row++ {
@@ -130,6 +130,10 @@ func sendJSON(v any) error {
 
 // startReadLoop dispatches incoming server messages into state.
 func startReadLoop(conn *websocket.Conn) {
+	// Respond to server pings to keep the connection alive.
+	conn.SetPingHandler(func(data string) error {
+		return conn.WriteControl(websocket.PongMessage, []byte(data), time.Now().Add(5*time.Second))
+	})
 	go func() {
 		for {
 			_, raw, err := conn.ReadMessage()
@@ -161,7 +165,8 @@ func startReadLoop(conn *websocket.Conn) {
 				idx := inputIDToIndex(msg.ID)
 				if idx >= 0 {
 					state.keyUpdates[idx] = time.Now()
-					state.logMsg(fmt.Sprintf("frame: id=%s key=%d (%dx%d)", msg.ID, idx, msg.Width, msg.Height))
+					state.frameData[idx] = msg.Data
+					state.logMsg(fmt.Sprintf("frame: id=%s key=%d (%dx%d) data_len=%d", msg.ID, idx, msg.Width, msg.Height, len(msg.Data)))
 				}
 			case "label":
 				idx := inputIDToIndex(msg.ID)

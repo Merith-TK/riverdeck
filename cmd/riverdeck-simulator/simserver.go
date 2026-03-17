@@ -1,44 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"image/color"
 	"log"
-	"net"
 	"net/http"
-	"strings"
 	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
-
-// ── Probe JSON loading ────────────────────────────────────────────────────────
-
-// SimSpec holds the subset of a ProbeResult needed to run the simulator.
-// It matches the JSON field names produced by riverdeck-debug-prober.
-type SimSpec struct {
-	ModelName    string `json:"model_name"`
-	VendorID     uint16 `json:"vendor_id"`
-	ProductID    uint16 `json:"product_id"`
-	Cols         int    `json:"cols"`
-	Rows         int    `json:"rows"`
-	Keys         int    `json:"keys"`
-	PixelSize    int    `json:"pixel_size"`
-	ImageFormat  string `json:"image_format"`
-	Manufacturer string `json:"manufacturer"`
-	Product      string `json:"product"`
-	Serial       string `json:"serial"`
-	Firmware     string `json:"firmware"`
-}
-
-// ── Display state ─────────────────────────────────────────────────────────────
-
-type keyState struct {
-	imgData    []byte      // PNG bytes (nil = no image set)
-	solidColor *color.RGBA // solid colour (nil = not set)
-}
 
 // ── SSE broadcaster ───────────────────────────────────────────────────────────
 
@@ -76,11 +49,19 @@ func (b *sseBroadcaster) send(eventName, jsonData string) {
 	}
 }
 
+// ── Display state ─────────────────────────────────────────────────────────────
+
+type keyState struct {
+	imgData []byte // PNG/JPEG bytes (nil = no image set)
+	label   string
+}
+
 // ── Simulator state ───────────────────────────────────────────────────────────
 
 type SimState struct {
 	spec     SimSpec
-	tcpPort  int
+	deviceID string
+	wsAddr   string
 	httpPort int
 
 	mu         sync.RWMutex
@@ -89,15 +70,16 @@ type SimState struct {
 
 	sse *sseBroadcaster
 
-	// The active riverdeck TCP connection (nil when disconnected).
-	riverdeckMu   sync.Mutex
-	riverdeckConn net.Conn
+	// The active WebSocket connection to riverdeck (nil when disconnected).
+	wsMu sync.Mutex
+	conn *websocket.Conn
 }
 
-func newSimState(spec SimSpec, tcpPort, httpPort int) *SimState {
+func newSimState(spec SimSpec, deviceID, wsAddr string, httpPort int) *SimState {
 	s := &SimState{
 		spec:       spec,
-		tcpPort:    tcpPort,
+		deviceID:   deviceID,
+		wsAddr:     wsAddr,
 		httpPort:   httpPort,
 		keys:       make([]keyState, spec.Keys),
 		brightness: 100,
@@ -106,198 +88,208 @@ func newSimState(spec SimSpec, tcpPort, httpPort int) *SimState {
 	return s
 }
 
-// ── TCP server (riverdeck side) ───────────────────────────────────────────────
+// ── WebSocket client (riverdeck side) ─────────────────────────────────────────
 
-// startTCPServer listens for riverdeck connections on tcpPort.
-// Only one connection is active at a time; a new connection replaces the old one.
-func (s *SimState) startTCPServer() {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.tcpPort))
-	if err != nil {
-		log.Fatalf("TCP listen :%d: %v", s.tcpPort, err)
-	}
-	log.Printf("TCP server listening on :%d  (riverdeck connects here)", s.tcpPort)
-
+// connectAndRun connects to the riverdeck WS server and blocks until disconnected.
+// It performs the hello/ack handshake then drives the receive loop.
+// Reconnects automatically every 5 seconds on failure.
+func (s *SimState) connectAndRun() {
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Printf("TCP accept error: %v", err)
-			continue
+		if err := s.runSession(); err != nil {
+			log.Printf("WS session ended: %v — retrying in 5s", err)
 		}
-		// Close any existing connection.
-		s.riverdeckMu.Lock()
-		if s.riverdeckConn != nil {
-			s.riverdeckConn.Close()
-		}
-		s.riverdeckConn = conn
-		s.riverdeckMu.Unlock()
-
-		log.Printf("riverdeck connected from %s", conn.RemoteAddr())
-		s.sse.send("connected", `{}`)
-		go s.handleRiverdeckConn(conn)
+		time.Sleep(5 * time.Second)
 	}
 }
 
-// devInfoJSON returns the devinfo JSON line sent to riverdeck on connect.
-func (s *SimState) devInfoJSON() string {
-	type devInfoMsg struct {
-		Type         string `json:"type"`
-		ModelName    string `json:"model_name"`
-		VendorID     uint16 `json:"vendor_id"`
-		ProductID    uint16 `json:"product_id"`
-		Cols         int    `json:"cols"`
-		Rows         int    `json:"rows"`
-		Keys         int    `json:"keys"`
-		PixelSize    int    `json:"pixel_size"`
-		ImageFormat  string `json:"image_format"`
-		Manufacturer string `json:"manufacturer"`
-		Product      string `json:"product"`
-		Serial       string `json:"serial"`
-		Firmware     string `json:"firmware"`
+func (s *SimState) runSession() error {
+	log.Printf("Connecting to riverdeck at %s ...", s.wsAddr)
+	conn, _, err := websocket.DefaultDialer.Dial(s.wsAddr, nil)
+	if err != nil {
+		return fmt.Errorf("dial: %w", err)
 	}
-	msg := devInfoMsg{
-		Type:         "devinfo",
-		ModelName:    s.spec.ModelName,
-		VendorID:     s.spec.VendorID,
-		ProductID:    s.spec.ProductID,
-		Cols:         s.spec.Cols,
-		Rows:         s.spec.Rows,
-		Keys:         s.spec.Keys,
-		PixelSize:    s.spec.PixelSize,
-		ImageFormat:  s.spec.ImageFormat,
-		Manufacturer: s.spec.Manufacturer,
-		Product:      s.spec.Product,
-		Serial:       s.spec.Serial,
-		Firmware:     s.spec.Firmware,
-	}
-	b, _ := json.Marshal(msg)
-	return string(b)
-}
+	defer conn.Close()
 
-// handleRiverdeckConn manages a single riverdeck ↔ simulator TCP session.
-func (s *SimState) handleRiverdeckConn(conn net.Conn) {
+	// Send hello.
+	hello := s.buildHello()
+	data, _ := json.Marshal(hello)
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return fmt.Errorf("send hello: %w", err)
+	}
+
+	// Wait for ack.
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		return fmt.Errorf("read ack: %w", err)
+	}
+	conn.SetReadDeadline(time.Time{}) // clear deadline
+
+	var ack struct {
+		Type       string `json:"type"`
+		Status     string `json:"status"`
+		Reason     string `json:"reason"`
+		Brightness int    `json:"brightness"`
+	}
+	if err := json.Unmarshal(raw, &ack); err != nil || ack.Type != "ack" {
+		return fmt.Errorf("expected ack, got: %s", string(raw))
+	}
+	if ack.Status != "ok" {
+		return fmt.Errorf("ack error: %s", ack.Reason)
+	}
+
+	log.Printf("Connected to riverdeck  (device=%s, brightness=%d%%)", s.deviceID, ack.Brightness)
+	s.wsMu.Lock()
+	s.conn = conn
+	s.wsMu.Unlock()
+
+	s.cmdSetBrightness(ack.Brightness)
+	s.sse.send("connected", `{}`)
+
 	defer func() {
-		conn.Close()
-		s.riverdeckMu.Lock()
-		if s.riverdeckConn == conn {
-			s.riverdeckConn = nil
+		s.wsMu.Lock()
+		if s.conn == conn {
+			s.conn = nil
 		}
-		s.riverdeckMu.Unlock()
-		log.Printf("riverdeck disconnected")
+		s.wsMu.Unlock()
 		s.sse.send("disconnected", `{}`)
 	}()
 
-	// Send device info immediately.
-	fmt.Fprintln(conn, s.devInfoJSON())
+	// Keepalive: pings arrive as control frames and don't return from
+	// ReadMessage, so we must reset the deadline in the PingHandler.
+	// The handler also sends the required pong reply.
+	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+	conn.SetPingHandler(func(data string) error {
+		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+		return conn.WriteControl(websocket.PongMessage, []byte(data), time.Now().Add(5*time.Second))
+	})
 
-	// Read commands from riverdeck.
-	scanner := bufio.NewScanner(conn)
-	// Increase scanner buffer to handle large base64-encoded images.
-	buf := make([]byte, 4*1024*1024)
-	scanner.Buffer(buf, len(buf))
+	// Receive loop.
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return fmt.Errorf("read: %w", err)
+		}
+		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+		s.handleServerMessage(raw)
+	}
+}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if err := s.handleCommand(line); err != nil {
-			log.Printf("command error: %v", err)
+// buildHello constructs the hello message declaring our device identity.
+func (s *SimState) buildHello() map[string]any {
+	inputs := make([]map[string]any, s.spec.Keys)
+	for i := 0; i < s.spec.Keys; i++ {
+		col := i % s.spec.Cols
+		row := i / s.spec.Cols
+		inputs[i] = map[string]any{
+			"id":   fmt.Sprintf("btn%d", i),
+			"type": "button",
+			"x":    col,
+			"y":    row,
+			"display": map[string]any{
+				"image":       true,
+				"imageWidth":  s.spec.PixelSize,
+				"imageHeight": s.spec.PixelSize,
+				"text":        true,
+				"formats":     []string{"png", "jpeg"},
+			},
 		}
 	}
+	return map[string]any{
+		"type":    "hello",
+		"id":      s.deviceID,
+		"name":    s.spec.ModelName,
+		"rows":    s.spec.Rows,
+		"cols":    s.spec.Cols,
+		"formats": []string{"png", "jpeg"},
+		"inputs":  inputs,
+	}
 }
 
-// ── Command dispatch ──────────────────────────────────────────────────────────
-
-type inboundCmd struct {
-	Type  string `json:"type"`
-	Key   int    `json:"key"`
-	Value int    `json:"value"`
-	Data  string `json:"data"` // base64 PNG for setimage
-	R     int    `json:"r"`
-	G     int    `json:"g"`
-	B     int    `json:"b"`
-}
-
-func (s *SimState) handleCommand(raw []byte) error {
-	var cmd inboundCmd
-	if err := json.Unmarshal(raw, &cmd); err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
+// handleServerMessage dispatches a JSON message from riverdeck.
+func (s *SimState) handleServerMessage(raw []byte) {
+	var msg struct {
+		Type   string `json:"type"`
+		ID     string `json:"id"`
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
+		Data   string `json:"data"`
+		Text   string `json:"text"`
+		Value  int    `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return
 	}
 
-	switch cmd.Type {
-	case "setimage":
-		return s.cmdSetImage(cmd.Key, cmd.Data)
-	case "setkeycolor":
-		return s.cmdSetKeyColor(cmd.Key, cmd.R, cmd.G, cmd.B)
+	switch msg.Type {
+	case "frame":
+		keyIndex := inputIDToIndex(msg.ID)
+		if keyIndex < 0 {
+			log.Printf("frame: unrecognised id=%s", msg.ID)
+			return
+		}
+		imgBytes, err := base64.StdEncoding.DecodeString(msg.Data)
+		if err != nil {
+			log.Printf("frame: base64 decode error key=%d: %v", keyIndex, err)
+			return
+		}
+		s.mu.Lock()
+		if keyIndex < len(s.keys) {
+			s.keys[keyIndex].imgData = imgBytes
+		}
+		s.mu.Unlock()
+		payload, _ := json.Marshal(map[string]any{"key": keyIndex, "data": msg.Data})
+		s.sse.send("setimage", string(payload))
+
+	case "label":
+		keyIndex := inputIDToIndex(msg.ID)
+		if keyIndex < 0 {
+			return
+		}
+		s.mu.Lock()
+		if keyIndex < len(s.keys) {
+			s.keys[keyIndex].label = msg.Text
+		}
+		s.mu.Unlock()
+		payload, _ := json.Marshal(map[string]any{"key": keyIndex, "text": msg.Text})
+		s.sse.send("setlabel", string(payload))
+
 	case "setbrightness":
-		return s.cmdSetBrightness(cmd.Value)
+		s.cmdSetBrightness(msg.Value)
+
 	case "clear":
-		return s.cmdClear()
-	case "reset":
-		return s.cmdClear() // treat reset same as clear for display
-	default:
-		// Unknown command -- ignore silently.
+		s.cmdClear()
+
+	case "layoutChange":
+		s.sse.send("layoutChange", string(raw))
 	}
-	return nil
 }
 
-func (s *SimState) cmdSetImage(keyIndex int, b64data string) error {
-	imgBytes, err := base64.StdEncoding.DecodeString(b64data)
-	if err != nil {
-		return fmt.Errorf("base64 decode: %w", err)
-	}
-
-	s.mu.Lock()
-	if keyIndex >= 0 && keyIndex < len(s.keys) {
-		s.keys[keyIndex].imgData = imgBytes
-		s.keys[keyIndex].solidColor = nil
-	}
-	s.mu.Unlock()
-
-	// Broadcast to browser via SSE (keep the base64 data as-is for the <img> src).
-	payload, _ := json.Marshal(map[string]any{
-		"key":  keyIndex,
-		"data": b64data,
-	})
-	s.sse.send("setimage", string(payload))
-	return nil
-}
-
-func (s *SimState) cmdSetKeyColor(keyIndex, r, g, b int) error {
-	c := &color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}
-
-	s.mu.Lock()
-	if keyIndex >= 0 && keyIndex < len(s.keys) {
-		s.keys[keyIndex].imgData = nil
-		s.keys[keyIndex].solidColor = c
-	}
-	s.mu.Unlock()
-
-	payload, _ := json.Marshal(map[string]any{
-		"key": keyIndex,
-		"r":   r, "g": g, "b": b,
-	})
-	s.sse.send("setkeycolor", string(payload))
-	return nil
-}
-
-func (s *SimState) cmdSetBrightness(value int) error {
+func (s *SimState) cmdSetBrightness(value int) {
 	s.mu.Lock()
 	s.brightness = value
 	s.mu.Unlock()
-
 	payload, _ := json.Marshal(map[string]any{"value": value})
 	s.sse.send("setbrightness", string(payload))
-	return nil
 }
 
-func (s *SimState) cmdClear() error {
+func (s *SimState) cmdClear() {
 	s.mu.Lock()
 	for i := range s.keys {
 		s.keys[i].imgData = nil
-		s.keys[i].solidColor = nil
+		s.keys[i].label = ""
 	}
 	s.mu.Unlock()
-
 	s.sse.send("clear", `{}`)
-	return nil
+}
+
+// inputIDToIndex maps "btnN" → N.  Returns -1 if not parseable.
+func inputIDToIndex(id string) int {
+	var n int
+	if _, err := fmt.Sscanf(id, "btn%d", &n); err != nil {
+		return -1
+	}
+	return n
 }
 
 // ── HTTP + SSE server (browser side) ─────────────────────────────────────────
@@ -322,7 +314,6 @@ func (s *SimState) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build sequential key indices for the template.
 	keySize := 100
 	gap := 8
 
@@ -344,7 +335,7 @@ func (s *SimState) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Keys":       s.spec.Keys,
 		"KeySize":    keySize,
 		"Gap":        gap,
-		"WsPort":     s.tcpPort,
+		"WsAddr":     s.wsAddr,
 		"KeyIndices": indices,
 	})
 }
@@ -364,7 +355,6 @@ func (s *SimState) handleSSE(w http.ResponseWriter, r *http.Request) {
 	ch, unsub := s.sse.subscribe()
 	defer unsub()
 
-	// Send a snapshot of the current display state to the new browser client.
 	s.sendSnapshot(w, flusher)
 
 	for {
@@ -373,8 +363,7 @@ func (s *SimState) handleSSE(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			_, err := w.Write(msg)
-			if err != nil {
+			if _, err := w.Write(msg); err != nil {
 				return
 			}
 			flusher.Flush()
@@ -392,11 +381,9 @@ func (s *SimState) sendSnapshot(w http.ResponseWriter, flusher http.Flusher) {
 	brightness := s.brightness
 	s.mu.RUnlock()
 
-	// Brightness
 	bp, _ := json.Marshal(map[string]any{"value": brightness})
 	fmt.Fprintf(w, "event: setbrightness\ndata: %s\n\n", bp)
 
-	// Key images / colours
 	for i, k := range keys {
 		if k.imgData != nil {
 			payload, _ := json.Marshal(map[string]any{
@@ -404,19 +391,16 @@ func (s *SimState) sendSnapshot(w http.ResponseWriter, flusher http.Flusher) {
 				"data": base64.StdEncoding.EncodeToString(k.imgData),
 			})
 			fmt.Fprintf(w, "event: setimage\ndata: %s\n\n", payload)
-		} else if k.solidColor != nil {
-			c := k.solidColor
-			payload, _ := json.Marshal(map[string]any{
-				"key": i, "r": int(c.R), "g": int(c.G), "b": int(c.B),
-			})
-			fmt.Fprintf(w, "event: setkeycolor\ndata: %s\n\n", payload)
+		}
+		if k.label != "" {
+			payload, _ := json.Marshal(map[string]any{"key": i, "text": k.label})
+			fmt.Fprintf(w, "event: setlabel\ndata: %s\n\n", payload)
 		}
 	}
 
-	// Connection state
-	s.riverdeckMu.Lock()
-	connected := s.riverdeckConn != nil
-	s.riverdeckMu.Unlock()
+	s.wsMu.Lock()
+	connected := s.conn != nil
+	s.wsMu.Unlock()
 	if connected {
 		fmt.Fprintf(w, "event: connected\ndata: {}\n\n")
 	}
@@ -439,24 +423,23 @@ func (s *SimState) handleKeyEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Forward key event to the connected riverdeck over TCP.
+	event := "release"
+	if body.Pressed {
+		event = "press"
+	}
 	msg, _ := json.Marshal(map[string]any{
-		"type":    "keyevent",
-		"key":     body.Key,
-		"pressed": body.Pressed,
+		"type":  "input",
+		"id":    fmt.Sprintf("btn%d", body.Key),
+		"event": event,
 	})
 
-	s.riverdeckMu.Lock()
-	conn := s.riverdeckConn
-	s.riverdeckMu.Unlock()
-
-	if conn != nil {
-		line := append(msg, '\n')
-		if _, err := conn.Write(line); err != nil {
-			log.Printf("write keyevent to riverdeck: %v", err)
-			// Connection likely broken -- it will be cleaned up by the reader.
+	s.wsMu.Lock()
+	if s.conn != nil {
+		if err := s.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			log.Printf("write input event to riverdeck: %v", err)
 		}
 	}
+	s.wsMu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintln(w, `{"ok":true}`)
@@ -464,7 +447,6 @@ func (s *SimState) handleKeyEvent(w http.ResponseWriter, r *http.Request) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// probeJSONError is returned when the probe JSON doesn't contain usable data.
 func validateSpec(spec SimSpec) error {
 	var missing []string
 	if spec.Cols == 0 {
@@ -477,7 +459,7 @@ func validateSpec(spec SimSpec) error {
 		missing = append(missing, "keys")
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("probe JSON is missing required fields: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("probe JSON is missing required fields: %s", fmt.Sprintf("%v", missing))
 	}
 	if spec.ModelName == "" {
 		spec.ModelName = fmt.Sprintf("Unknown (PID 0x%04X)", spec.ProductID)

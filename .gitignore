@@ -57,9 +57,10 @@ resources/icons/
 *_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json
 testdata/
 
-# MCP client persistent identity files (generated per-machine, not portable)
+# Persistent identity files (generated per-machine, not portable)
 .mcp-device-id
 **/.mcp-device-id
+.sim-device-id
 
 # Configuration / runtime data that may contain sensitive info
 # (auth tokens, device state, etc. live under .riverdeck/.packages/*/data)

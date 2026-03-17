@@ -48,6 +48,7 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	state.deviceID = deviceID
 	state.keyUpdates = make(map[int]time.Time)
 	state.labels = make(map[int]string)
+	state.frameData = make(map[int]string)
 	state.messages = nil
 	hello := buildHelloMsg(deviceID)
 	state.inputIDs = make([]string, len(hello.Inputs))
@@ -131,8 +132,9 @@ func toolGetState(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 		fmt.Fprintf(&sb, "\nframe updates received:")
 		for idx, id := range state.inputIDs {
 			if t, ok := state.keyUpdates[idx]; ok {
-				fmt.Fprintf(&sb, "\n  key %2d (%s)  last updated %s ago",
-					idx, id, time.Since(t).Round(time.Millisecond))
+				dataLen := len(state.frameData[idx])
+				fmt.Fprintf(&sb, "\n  key %2d (%s)  last updated %s ago  data_len=%d",
+					idx, id, time.Since(t).Round(time.Millisecond), dataLen)
 			}
 		}
 	}
