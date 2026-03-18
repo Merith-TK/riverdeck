@@ -1,20 +1,21 @@
-# Session -- WS Protocol Redesign
+# Editor Overhaul + Package Management Implementation
 
-## Completed
-- [x] 1. `pkg/streamdeck/iface.go` -- add `SetLabel`, change `EncodeKeyImage(keyIndex, img)`
-- [x] 2. `pkg/streamdeck/device.go` -- stub `SetLabel`, update `EncodeKeyImage` sig
-- [x] 3. `pkg/streamdeck/simclient.go` -- same stubs
-- [x] 4. `pkg/streamdeck/layout_navigator.go` -- pass keyIndex to `EncodeKeyImage`; send `SetLabel` after render
-- [x] 5. `pkg/streamdeck/navigation.go` -- pass keyIndex to `EncodeKeyImage` (folder navigator)
-- [x] 6. `cmd/riverdeck/gif.go` -- pass keyIndex to `EncodeKeyImage`
-- [x] 7. `pkg/wsdevice/device.go` -- full rewrite: hello-driven, format negotiation, label, ping/pong
-- [x] 8. `pkg/wsdevice/server.go` -- full rewrite: multi-device, hello/ack, duplicate rejection, keepalive
-- [x] 9. `cmd/riverdeck/app.go` -- remove hardcoded wsModel from NewServer call
-- [x] 10. `cmd/riverdeck/wsdevice.go` -- UUID() -> ID()
-- [x] 11. `cmd/mcp-wsdevice/state.go` -- persistent device ID, hello/ack/frame/label handling
-- [x] 12. `cmd/mcp-wsdevice/tools.go` -- send hello, `input` events, labels in state, rd_list_inputs
-- [x] 13. `cmd/mcp-wsdevice/main.go` -- add rd_list_inputs tool registration
-- [x] 14. `mage build` -- clean
+See design doc: `docs/editor-package-design.md`
 
-## Outstanding
-- [ ] End-to-end test via MCP tools (requires Claude Code restart to reload mcp-wsdevice)
+## Steps
+
+- [ ] 1. Write design doc to `docs/editor-package-design.md` ← DONE
+- [ ] 2. Config dir restructure + auto-migration (`pkg/platform/configdir.go`, `cmd/riverdeck/config.go`, `cmd/riverdeck/app.go`)
+- [ ] 3. `pkg/gitpkg/` — hybrid git backend (git.go, git_native.go, git_go.go)
+- [ ] 4. `pkg/pkgmanager/` — install/remove/update/list + index + lock (5 files)
+- [ ] 5. `riverdeck.config` module redesign (`pkg/scripting/modules/config.go`)
+- [ ] 6. `riverdeck.*` module aliases (`pkg/scripting/runner.go`)
+- [ ] 7. Custom Lua import searcher (`pkg/scripting/runner.go`)
+- [ ] 8. New editorserver API endpoints for install/remove/update/daemon-toggle (`pkg/editorserver/handler_packages.go`)
+- [ ] 9. Monaco editor fix (`resources/editor/editor.js`)
+- [ ] 10. Package manager modal UI (`resources/editor/index.html`, `resources/editor/editor.js`)
+- [ ] 11. Daemon explicit opt-in (`pkg/scripting/manager.go`)
+- [ ] 12. Add go-git dependency (`go.mod`)
+- [ ] 13. Build verification
+
+## Review
