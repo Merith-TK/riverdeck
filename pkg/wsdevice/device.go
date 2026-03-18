@@ -381,3 +381,5 @@ func (d *Device) ModelName() string {
 	return fmt.Sprintf("%s (%dx%d)", d.name, d.cols, d.rows)
 }
 func (d *Device) GetInfo() streamdeck.DeviceInfo { return d.info }
+func (d *Device) Name() string                   { return d.name }
+func (d *Device) Inputs() []InputDescriptor      { return d.inputs }

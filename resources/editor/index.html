@@ -13,7 +13,12 @@
 	<!-- ── Header ── -->
 	<header>
 		<h1>Riverdeck Editor</h1>
-		<span id="hdr-device"></span>
+		<div id="device-selector">
+			<label for="hdr-device-select" style="display:none">Device</label>
+			<select id="hdr-device-select" onchange="onDeviceChange(this.value)" title="Select device">
+				<option value="">No devices connected</option>
+			</select>
+		</div>
 		<div id="mode-toggle">
 			<button id="btn-mode-folder" onclick="setMode('folder')">Folder</button>
 			<button id="btn-mode-layout" onclick="setMode('layout')">Layout</button>

@@ -138,6 +138,72 @@ func SaveLayout(configDir, name string, lay *Layout) error {
 	return writeFile(configDir, f)
 }
 
+// DeviceDir returns the per-device cache directory (.devices/{id}/).
+// The dot-prefix causes folder-mode navigation to skip the directory.
+func DeviceDir(configDir, deviceID string) string {
+	return filepath.Join(configDir, ".devices", deviceID)
+}
+
+// SaveDeviceGeometry writes a DeviceGeometry snapshot to
+// configDir/.devices/{id}/device.json.
+func SaveDeviceGeometry(configDir string, g *DeviceGeometry) error {
+	dir := DeviceDir(configDir, g.ID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(g, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "device.json"), data, 0644)
+}
+
+// LoadAllDeviceGeometries reads all device.json files from
+// configDir/.devices/*/device.json and returns them.
+func LoadAllDeviceGeometries(configDir string) ([]*DeviceGeometry, error) {
+	root := filepath.Join(configDir, ".devices")
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []*DeviceGeometry
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(root, e.Name(), "device.json")
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var g DeviceGeometry
+		if json.Unmarshal(data, &g) == nil {
+			out = append(out, &g)
+		}
+	}
+	return out, nil
+}
+
+// AssignDeviceLayout updates the Devices map in configDir/layout.json so that
+// deviceID is assigned to layoutName.
+func AssignDeviceLayout(configDir, deviceID, layoutName string) error {
+	f, err := LoadFile(configDir)
+	if err != nil {
+		return err
+	}
+	if f == nil {
+		f = &LayoutFile{}
+	}
+	if f.Devices == nil {
+		f.Devices = make(map[string]string)
+	}
+	f.Devices[deviceID] = layoutName
+	return writeFile(configDir, f)
+}
+
 // writeFile serialises f to configDir/layout.json atomically.
 func writeFile(configDir string, f *LayoutFile) error {
 	if err := os.MkdirAll(configDir, 0755); err != nil {

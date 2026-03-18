@@ -94,7 +94,9 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/layout", s.handleLayout)
+	mux.HandleFunc("/api/devices", s.handleDevices)
 	mux.HandleFunc("/api/packages", s.handlePackages)
+	mux.HandleFunc("/api/packages/", s.handlePackagesSub)
 	mux.HandleFunc("/api/scripts", s.handleScripts)
 	mux.HandleFunc("/api/device", s.handleDevice)
 	mux.HandleFunc("/api/mode", s.handleMode)

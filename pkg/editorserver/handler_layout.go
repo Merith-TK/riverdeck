@@ -8,8 +8,19 @@ import (
 )
 
 func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
+	deviceID := r.URL.Query().Get("device")
+
 	switch r.Method {
 	case http.MethodGet:
+		if deviceID != "" {
+			lay, err := layout.LoadForDevice(s.cfg.ConfigDir, deviceID)
+			if err != nil {
+				http.Error(w, "load error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, lay)
+			return
+		}
 		s.mu.RLock()
 		lay := s.layout
 		s.mu.RUnlock()
@@ -37,6 +48,13 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 		if err := layout.SaveLayout(s.cfg.ConfigDir, layoutName, &incoming); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
+		}
+		// If a device ID was provided, update its layout assignment.
+		if deviceID != "" {
+			if err := layout.AssignDeviceLayout(s.cfg.ConfigDir, deviceID, layoutName); err != nil {
+				// non-fatal: log but continue
+				_ = err
+			}
 		}
 		s.mu.Lock()
 		s.layout = &incoming

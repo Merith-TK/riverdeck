@@ -3,6 +3,7 @@ package main
 import (
 	"image/color"
 	"log"
+	"time"
 
 	"github.com/merith-tk/riverdeck/pkg/imaging"
 	"github.com/merith-tk/riverdeck/pkg/layout"
@@ -26,6 +27,27 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 		log.Printf("[wsdevice] layout load error id=%s: %v", id, err)
 		lay = layout.NewEmpty()
 	}
+
+	// Save device geometry so the editor can show this device's grid.
+	go func() {
+		inputs := dev.Inputs()
+		cached := make([]layout.CachedInput, len(inputs))
+		for i, inp := range inputs {
+			cached[i] = layout.CachedInput{
+				ID: inp.ID, Type: inp.Type,
+				X: inp.X, Y: inp.Y,
+				ImageWidth: inp.ImageWidth, ImageHeight: inp.ImageHeight,
+				HasImage: inp.Image, HasText: inp.Text,
+			}
+		}
+		if err := layout.SaveDeviceGeometry(a.configPath, &layout.DeviceGeometry{
+			ID: dev.ID(), Name: dev.Name(), Source: "wsdevice",
+			Rows: dev.Rows(), Cols: dev.Cols(),
+			Inputs: cached, LastSeen: time.Now(),
+		}); err != nil {
+			log.Printf("[wsdevice] geometry save error id=%s: %v", id, err)
+		}
+	}()
 
 	nav := streamdeck.NewLayoutNavigator(dev, a.configPath, lay)
 

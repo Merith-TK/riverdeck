@@ -39,6 +39,8 @@
 //	}
 package layout
 
+import "time"
+
 // LayoutButton describes a single button in a layout page.
 type LayoutButton struct {
 	// Slot is the physical key index (row * cols + col, 0-based).
@@ -160,6 +162,30 @@ func (l *Layout) PageIndexByName(name string) int {
 		}
 	}
 	return -1
+}
+
+// CachedInput is a serialisable snapshot of one device input's capabilities.
+type CachedInput struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"` // "button" | "dial"
+	X           int    `json:"x"`
+	Y           int    `json:"y"`
+	ImageWidth  int    `json:"imageWidth"`
+	ImageHeight int    `json:"imageHeight"`
+	HasImage    bool   `json:"hasImage"`
+	HasText     bool   `json:"hasText"`
+}
+
+// DeviceGeometry is a cached snapshot of a device's identity and grid shape.
+// It is written whenever a device connects and read by the editor API.
+type DeviceGeometry struct {
+	ID       string        `json:"id"`
+	Name     string        `json:"name"`
+	Source   string        `json:"source"` // "hardware" | "wsdevice"
+	Rows     int           `json:"rows"`
+	Cols     int           `json:"cols"`
+	Inputs   []CachedInput `json:"inputs"`
+	LastSeen time.Time     `json:"last_seen"`
 }
 
 // NewEmpty returns a Layout with a single empty page named "Main".
