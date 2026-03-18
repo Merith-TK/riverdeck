@@ -45,6 +45,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/merith-tk/riverdeck/pkg/platform"
 )
 
 // MetadataField describes a single editable metadata key for a ButtonTemplate.
@@ -193,14 +195,14 @@ type ResolvedButtonTemplate struct {
 // Individual packages with unreadable or malformed manifest.json are logged and
 // still included -- the lib/ directory can still be found without a manifest.
 func ScanPackages(configDir string) ([]*ScannedPackage, error) {
-	packagesDir := filepath.Join(configDir, ".packages")
+	packagesDir := platform.PackagesDir(configDir)
 
 	entries, err := os.ReadDir(packagesDir)
 	if os.IsNotExist(err) {
 		return nil, nil // no packages directory - nothing to do
 	}
 	if err != nil {
-		return nil, fmt.Errorf("scanning .packages: %w", err)
+		return nil, fmt.Errorf("scanning packages: %w", err)
 	}
 
 	var packages []*ScannedPackage

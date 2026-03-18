@@ -34,3 +34,24 @@ func ConfigDir(override string) string {
 	}
 	return ".riverdeck"
 }
+
+// PackagesDir returns the path to the installed packages directory.
+//
+//	<configDir>/.config/packages/
+func PackagesDir(configDir string) string {
+	return filepath.Join(configDir, ".config", "packages")
+}
+
+// DevicesDir returns the path to the per-device configuration directory.
+//
+//	<configDir>/.config/devices/
+func DevicesDir(configDir string) string {
+	return filepath.Join(configDir, ".config", "devices")
+}
+
+// ConfigFile returns the path to the main application config file.
+//
+//	<configDir>/.config.yml
+func ConfigFile(configDir string) string {
+	return filepath.Join(configDir, ".config.yml")
+}

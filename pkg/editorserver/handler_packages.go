@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 )
 
@@ -27,7 +28,7 @@ func (s *Server) handlePackagesSub(w http.ResponseWriter, r *http.Request) {
 	vendor := parts[0]
 	name := parts[1]
 	pkgID := vendor + "." + name
-	pkgDir := filepath.Join(s.cfg.ConfigDir, ".packages", pkgID)
+	pkgDir := filepath.Join(platform.PackagesDir(s.cfg.ConfigDir), pkgID)
 
 	switch r.Method {
 	case http.MethodPost:
@@ -240,7 +241,7 @@ func (s *Server) handlePackageCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pkgID := req.Vendor + "." + req.Name
-	pkgDir := filepath.Join(s.cfg.ConfigDir, ".packages", pkgID)
+	pkgDir := filepath.Join(platform.PackagesDir(s.cfg.ConfigDir), pkgID)
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {
 		http.Error(w, "mkdir error: "+err.Error(), http.StatusInternalServerError)
 		return

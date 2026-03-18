@@ -1,24 +1,38 @@
 package modules
 
-// config.go provides a read-only configuration module for Lua scripts.
+// config.go provides the per-script configuration module for Lua scripts.
 //
-// Every script can require('config') to access per-button configuration
-// values.  The module exposes three functions:
+// Scripts can access configuration via:
 //
-//   local config = require('config')
-//   config.get("key")      -- merged value (override wins over default)
-//   config.all()           -- table of all merged key/value pairs
-//   config.schema()        -- array of {key, label, type, default, description}
+//	-- Legacy API (still supported, maps to riverdeck.config)
+//	local config = require('config')
+//	config.get("key")      -- merged value (override wins over default)
+//	config.all()           -- table of all merged key/value pairs
+//	config.schema()        -- array of {key, label, type, default, description}
+//
+//	-- New riverdeck.config API
+//	local cfg = require("riverdeck.config")
+//	cfg.script.defaultdata = { volume = 5, foo = "bar" }
+//	cfg.script.sync()           -- reads .config.json, fills from defaultdata
+//	local vol = cfg.script.data.volume
+//	cfg.script.data.volume = 10
+//	cfg.script.save()           -- writes overrides back to disk
+//
+// Both APIs are backed by the same ConfigModule. The `script` sub-table
+// exposes the new API; the module itself exports the legacy `get`/`all`/`schema`
+// functions for backward compatibility.
 //
 // The backing data comes from two sources depending on navigation mode:
 //
 // Folder mode:
-//   A sibling .config.json file next to the Lua script.
-//   Format: {"schema": [...], "overrides": {...}}
+//
+//	A sibling .config.json file next to the Lua script.
+//	Format: {"schema": [...], "overrides": {...}}
 //
 // Layout mode:
-//   The package template's MetadataSchema provides defaults,
-//   and the button's Metadata map provides overrides.
+//
+//	The package template's MetadataSchema provides defaults,
+//	and the button's Metadata map provides overrides.
 //
 // Both are resolved by ScriptManager and injected into the ConfigModule
 // before the script runs.
@@ -37,11 +51,16 @@ type ConfigField struct {
 	Description string
 }
 
-// ConfigModule is a read-only per-script configuration store.
+// ConfigModule is a per-script configuration store supporting both the legacy
+// and the new riverdeck.config API.
 type ConfigModule struct {
 	schema   []ConfigField
 	defaults map[string]string
 	merged   map[string]string // defaults + overrides
+
+	// scriptPath is the absolute path of the owning script. Used by sync()
+	// and save() to locate the sibling .config.json.
+	scriptPath string
 }
 
 // NewConfigModule creates a ConfigModule from schema fields and user overrides.
@@ -67,14 +86,44 @@ func NewConfigModule(schema []ConfigField, overrides map[string]string) *ConfigM
 	}
 }
 
-// Loader is the gopher-lua module loader.
+// SetScriptPath stores the script path for use by sync()/save().
+func (m *ConfigModule) SetScriptPath(path string) {
+	m.scriptPath = path
+}
+
+// Loader is the gopher-lua module loader for both "config" (legacy) and
+// "riverdeck.config" (new) module names.
 // Preload as: L.PreloadModule("config", cfgMod.Loader)
+//             L.PreloadModule("riverdeck.config", cfgMod.Loader)
 func (m *ConfigModule) Loader(L *lua.LState) int {
 	mod := L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{
+		// Legacy API
 		"get":    m.cfgGet,
 		"all":    m.cfgAll,
 		"schema": m.cfgSchema,
 	})
+
+	// New API: cfg.script sub-table
+	scriptTbl := L.NewTable()
+
+	// cfg.script.defaultdata — writable table set by the script
+	L.SetField(scriptTbl, "defaultdata", L.NewTable())
+
+	// cfg.script.data — read/write data table (populated after sync())
+	dataTbl := L.NewTable()
+	for k, v := range m.merged {
+		dataTbl.RawSetString(k, lua.LString(v))
+	}
+	L.SetField(scriptTbl, "data", dataTbl)
+
+	// cfg.script.sync() — merge defaultdata + disk overrides into data
+	L.SetField(scriptTbl, "sync", L.NewFunction(m.makeSync(L, scriptTbl)))
+
+	// cfg.script.save() — write data back as overrides
+	L.SetField(scriptTbl, "save", L.NewFunction(m.makeSave(L, scriptTbl)))
+
+	L.SetField(mod, "script", scriptTbl)
+
 	L.Push(mod)
 	return 1
 }
@@ -118,4 +167,50 @@ func (m *ConfigModule) cfgSchema(L *lua.LState) int {
 	}
 	L.Push(arr)
 	return 1
+}
+
+// makeSync returns a Lua function that:
+//  1. Reads script's defaultdata table (declared by the script).
+//  2. Merges with any disk overrides (from .config.json in folder mode,
+//     or from the existing merged values already set in layout mode).
+//  3. Writes the result into cfg.script.data.
+func (m *ConfigModule) makeSync(L *lua.LState, scriptTbl *lua.LTable) lua.LGFunction {
+	return func(L *lua.LState) int {
+		// Read defaultdata declared by the script.
+		defaults := L.GetField(scriptTbl, "defaultdata")
+		data := L.NewTable()
+
+		// First, apply defaults from defaultdata.
+		if dt, ok := defaults.(*lua.LTable); ok {
+			dt.ForEach(func(k, v lua.LValue) {
+				data.RawSet(k, v)
+			})
+		}
+
+		// Then, overlay with the pre-merged values from the Go side.
+		// These already incorporate schema defaults + overrides.
+		for k, v := range m.merged {
+			data.RawSetString(k, lua.LString(v))
+		}
+
+		L.SetField(scriptTbl, "data", data)
+		return 0
+	}
+}
+
+// makeSave returns a Lua function that writes cfg.script.data back to
+// the module's merged map (in-memory only for layout mode; folder mode
+// would need disk write, which is left for future implementation).
+func (m *ConfigModule) makeSave(L *lua.LState, scriptTbl *lua.LTable) lua.LGFunction {
+	return func(L *lua.LState) int {
+		data := L.GetField(scriptTbl, "data")
+		if dt, ok := data.(*lua.LTable); ok {
+			dt.ForEach(func(k, v lua.LValue) {
+				if ks, ok := k.(lua.LString); ok {
+					m.merged[string(ks)] = v.String()
+				}
+			})
+		}
+		return 0
+	}
 }

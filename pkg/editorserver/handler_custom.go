@@ -9,12 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 )
 
 // customPkgDir returns the absolute path to the local-only _custom package.
 func (s *Server) customPkgDir() string {
-	return filepath.Join(s.cfg.ConfigDir, ".packages", "_custom")
+	return filepath.Join(platform.PackagesDir(s.cfg.ConfigDir), "_custom")
 }
 
 // ensureCustomPackage creates the _custom package directory and manifest if

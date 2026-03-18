@@ -654,6 +654,11 @@ function applySplit(tab) {
 	if (ctabMonaco) ctabMonaco.classList.toggle('active', tab === 'monaco');
 	document.getElementById('form-tab').style.display = tab === 'form' ? '' : 'none';
 	document.getElementById('monaco-tab').style.display = tab === 'monaco' ? '' : 'none';
+	// Force Monaco to recalculate its layout after the tab becomes visible.
+	// Without this call the editor renders as a 0-height element when first shown.
+	if (tab === 'monaco' && monacoEditor) {
+		requestAnimationFrame(() => monacoEditor.layout());
+	}
 }
 
 function switchConfigTab(tab) {
@@ -1152,6 +1157,125 @@ async function saveSettings() {
 		toast('Config saved \u2014 restart Riverdeck to apply changes');
 	} catch (e) {
 		toast('Save failed: ' + e, true);
+	}
+}
+
+// ── Package Manager Modal ─────────────────────────────────────────────────────
+
+function showPkgModal() {
+	document.getElementById('pkg-modal-overlay').style.display = 'flex';
+	refreshPkgList();
+}
+
+function hidePkgModal() {
+	document.getElementById('pkg-modal-overlay').style.display = 'none';
+}
+
+async function refreshPkgList() {
+	const container = document.getElementById('pkg-installed-list');
+	container.innerHTML = '<p style="color:var(--txt3);font-size:.82rem">Loading...</p>';
+	try {
+		const resp = await fetch('/api/pkg/list');
+		if (!resp.ok) throw new Error(await resp.text());
+		const pkgs = await resp.json();
+		renderPkgList(pkgs || []);
+	} catch (e) {
+		container.innerHTML = '<p style="color:var(--danger)">Failed: ' + esc(String(e)) + '</p>';
+	}
+}
+
+function renderPkgList(pkgs) {
+	const container = document.getElementById('pkg-installed-list');
+	if (pkgs.length === 0) {
+		container.innerHTML = '<p style="color:var(--txt3);font-size:.82rem">No packages installed.</p>';
+		return;
+	}
+	container.innerHTML = pkgs.map(p => {
+		const name = esc(p.name || p.repo_dir || p.RepoDir || '');
+		const ver = esc(p.version || p.Version || '');
+		const repoDir = esc(p.repo_dir || p.RepoDir || '');
+		const daemonEnabled = p.daemon_enabled || p.DaemonEnabled;
+		return `<div class="pkg-row">
+			<div class="pkg-row-info">
+				<span class="pkg-name">${name}</span>
+				${ver ? `<span class="pkg-ver">${ver}</span>` : ''}
+				<span class="pkg-dir" style="color:var(--txt3);font-size:.75rem">${repoDir}</span>
+			</div>
+			<div class="pkg-row-actions">
+				<label class="toggle-label" title="Enable daemon">
+					<input type="checkbox" ${daemonEnabled ? 'checked' : ''} onchange="setPkgDaemon('${repoDir}', '', this.checked)">
+					Daemon
+				</label>
+				<button class="btn-ghost" style="padding:2px 8px" onclick="updatePackage('${repoDir}')">Update</button>
+				<button class="btn-danger" style="padding:2px 8px" onclick="removePackage('${repoDir}')">Remove</button>
+			</div>
+		</div>`;
+	}).join('');
+}
+
+async function installPackage() {
+	const url = document.getElementById('pkg-install-url').value.trim();
+	const status = document.getElementById('pkg-install-status');
+	if (!url) { status.textContent = 'Enter a package URL first.'; return; }
+	status.textContent = 'Installing...';
+	try {
+		const resp = await fetch('/api/pkg/install', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		status.style.color = 'var(--success)';
+		status.textContent = 'Installed successfully.';
+		document.getElementById('pkg-install-url').value = '';
+		refreshPkgList();
+	} catch (e) {
+		status.style.color = 'var(--danger)';
+		status.textContent = 'Error: ' + String(e);
+	}
+}
+
+async function removePackage(repoDir) {
+	if (!confirm('Remove package ' + repoDir + '?')) return;
+	try {
+		const resp = await fetch('/api/pkg/remove', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url: repoDir }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		toast('Package removed.');
+		refreshPkgList();
+	} catch (e) {
+		toast('Remove failed: ' + e, true);
+	}
+}
+
+async function updatePackage(repoDir) {
+	try {
+		const resp = await fetch('/api/pkg/update', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url: repoDir }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		toast('Package updated.');
+		refreshPkgList();
+	} catch (e) {
+		toast('Update failed: ' + e, true);
+	}
+}
+
+async function setPkgDaemon(repo, sub, enabled) {
+	try {
+		const resp = await fetch('/api/pkg/daemon', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ repo, sub, enabled }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+	} catch (e) {
+		toast('Daemon toggle failed: ' + e, true);
 	}
 }
 

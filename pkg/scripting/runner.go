@@ -41,6 +41,8 @@ import (
 	"time"
 
 	"github.com/merith-tk/riverdeck/pkg/lualib"
+	"github.com/merith-tk/riverdeck/pkg/pkgmanager"
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting/modules"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	lua "github.com/yuin/gopher-lua"
@@ -251,6 +253,7 @@ func (r *ScriptRunner) registerModules() {
 
 	// Register the per-script config module if configuration was provided.
 	if r.configModule != nil {
+		r.configModule.SetScriptPath(r.ScriptPath)
 		r.L.PreloadModule("config", r.configModule.Loader)
 	}
 
@@ -266,7 +269,12 @@ func (r *ScriptRunner) registerModules() {
 		}
 	}
 
-	// Extend package.path with every .packages/*/lib/ directory so that
+	// Register riverdeck.* aliases for all built-in modules.
+	// These mirror the non-prefixed names so scripts can use either form.
+	// The riverdeck.* names are the preferred new-style names.
+	r.registerRiverdeck(shellMod, httpMod, systemMod, sdMod, fileMod)
+
+	// Extend package.path with every .config/packages/*/lib/ directory so that
 	// require('mylib') resolves to the installed package's library file.
 	if len(r.packageLibPaths) > 0 {
 		pkg := r.L.GetGlobal("package")
@@ -280,10 +288,104 @@ func (r *ScriptRunner) registerModules() {
 		}
 	}
 
+	// Register the custom package searcher that resolves dot-notation imports
+	// like require("merith-tk.riverdeck-packages.ytmd.lib.api").
+	r.registerPackageSearcher()
+
 	// Set globals
 	r.L.SetGlobal("SCRIPT_PATH", lua.LString(r.ScriptPath))
 	r.L.SetGlobal("SCRIPT_NAME", lua.LString(r.ScriptName))
 	r.L.SetGlobal("CONFIG_DIR", lua.LString(r.configDir))
+}
+
+// registerRiverdeck registers riverdeck.* module aliases in the Lua preload table.
+func (r *ScriptRunner) registerRiverdeck(
+	shellMod *modules.ShellModule,
+	httpMod *modules.HTTPModule,
+	systemMod *modules.SystemModule,
+	sdMod *modules.StreamDeckModule,
+	fileMod *modules.FileModule,
+) {
+	r.L.PreloadModule("riverdeck.shell", shellMod.Loader)
+	r.L.PreloadModule("riverdeck.http", httpMod.Loader)
+	r.L.PreloadModule("riverdeck.system", systemMod.Loader)
+	r.L.PreloadModule("riverdeck.streamdeck", sdMod.Loader)
+	r.L.PreloadModule("riverdeck.file", fileMod.Loader)
+
+	if r.store != nil {
+		r.L.PreloadModule("riverdeck.store", r.store.Loader)
+	}
+	if r.configModule != nil {
+		r.L.PreloadModule("riverdeck.config", r.configModule.Loader)
+	}
+	if r.packageDataDir != "" {
+		pkgData, err := modules.NewPackageDataModule(r.packageDataDir)
+		if err == nil {
+			r.L.PreloadModule("riverdeck.pkg_data", pkgData.Loader)
+		}
+	}
+}
+
+// registerPackageSearcher adds a custom Lua package searcher that resolves
+// dot-notation import paths through the install index.
+//
+// The searcher is inserted at position 5 in package.searchers (after the
+// standard Lua searchers), so standard require() semantics still take
+// precedence for normal module names.
+//
+// Example: require("merith-tk.riverdeck-packages.ytmd.lib.api")
+// resolves via .config/packages/.index.json to the actual .lua file.
+func (r *ScriptRunner) registerPackageSearcher() {
+	packagesDir := platform.PackagesDir(r.configDir)
+
+	searcher := r.L.NewFunction(func(L *lua.LState) int {
+		moduleName := L.CheckString(1)
+
+		// Only handle names that look like package dot-paths (at least one dot
+		// and the first segment is not a known standard prefix).
+		if !strings.Contains(moduleName, ".") {
+			L.Push(lua.LString("not a package import: " + moduleName))
+			return 1
+		}
+		// Skip riverdeck.* built-ins — those are handled by PreloadModule.
+		if strings.HasPrefix(moduleName, "riverdeck.") {
+			L.Push(lua.LString("riverdeck.* is a built-in, not a package import"))
+			return 1
+		}
+
+		// Load the index from disk on each require() to pick up newly installed packages.
+		idx, err := pkgmanager.LoadIndex(packagesDir)
+		if err != nil || len(idx) == 0 {
+			L.Push(lua.LString("no package index found"))
+			return 1
+		}
+
+		candidate, ok := idx.Resolve(moduleName, packagesDir)
+		if !ok {
+			L.Push(lua.LString("not found in package index: " + moduleName))
+			return 1
+		}
+
+		// Return a loader function that does the actual require.
+		loader := L.NewFunction(func(L *lua.LState) int {
+			if err := L.DoFile(candidate); err != nil {
+				L.RaiseError("package searcher: failed to load %s: %v", candidate, err)
+				return 0
+			}
+			return 1
+		})
+		L.Push(loader)
+		return 1
+	})
+
+	// Insert our searcher at the end of package.searchers.
+	pkg := r.L.GetGlobal("package")
+	if pkgTable, ok := pkg.(*lua.LTable); ok {
+		searchers := r.L.GetField(pkgTable, "searchers")
+		if st, ok := searchers.(*lua.LTable); ok {
+			st.Append(searcher)
+		}
+	}
 }
 
 // SetRefreshCallback sets the function called when script requests refresh.

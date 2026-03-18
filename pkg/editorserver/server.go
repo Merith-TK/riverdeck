@@ -111,4 +111,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/custom-template", s.handleCustomTemplate)
 	mux.HandleFunc("/api/custom-template/file", s.handleCustomTemplateFile)
 	mux.HandleFunc("/api/monaco/", s.handleMonaco)
+
+	// Package manager endpoints (new-style)
+	mux.HandleFunc("/api/pkg/install", s.handlePkgInstall)
+	mux.HandleFunc("/api/pkg/remove", s.handlePkgRemove)
+	mux.HandleFunc("/api/pkg/update", s.handlePkgUpdate)
+	mux.HandleFunc("/api/pkg/list", s.handlePkgList)
+	mux.HandleFunc("/api/pkg/daemon", s.handlePkgDaemon)
 }

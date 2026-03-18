@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/merith-tk/riverdeck/pkg/platform"
 )
 
 // Validate checks a Layout for structural correctness and returns a list of
@@ -138,10 +140,9 @@ func SaveLayout(configDir, name string, lay *Layout) error {
 	return writeFile(configDir, f)
 }
 
-// DeviceDir returns the per-device cache directory (.devices/{id}/).
-// The dot-prefix causes folder-mode navigation to skip the directory.
+// DeviceDir returns the per-device cache directory (.config/devices/{id}/).
 func DeviceDir(configDir, deviceID string) string {
-	return filepath.Join(configDir, ".devices", deviceID)
+	return filepath.Join(platform.DevicesDir(configDir), deviceID)
 }
 
 // SaveDeviceGeometry writes a DeviceGeometry snapshot to
@@ -159,9 +160,9 @@ func SaveDeviceGeometry(configDir string, g *DeviceGeometry) error {
 }
 
 // LoadAllDeviceGeometries reads all device.json files from
-// configDir/.devices/*/device.json and returns them.
+// configDir/.config/devices/*/device.json and returns them.
 func LoadAllDeviceGeometries(configDir string) ([]*DeviceGeometry, error) {
-	root := filepath.Join(configDir, ".devices")
+	root := platform.DevicesDir(configDir)
 	entries, err := os.ReadDir(root)
 	if os.IsNotExist(err) {
 		return nil, nil

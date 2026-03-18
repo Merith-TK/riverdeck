@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/merith-tk/riverdeck/pkg/platform"
 	"gopkg.in/yaml.v3"
@@ -22,10 +21,11 @@ type Config struct {
 }
 
 type ApplicationConfig struct {
-	Brightness int  `yaml:"brightness"`
-	PassiveFPS int  `yaml:"passive_fps"`
-	Timeout    int  `yaml:"timeout"` // Seconds before display sleeps; 0 = never
-	Debug      bool `yaml:"debug"`
+	Brightness int    `yaml:"brightness"`
+	PassiveFPS int    `yaml:"passive_fps"`
+	Timeout    int    `yaml:"timeout"`     // Seconds before display sleeps; 0 = never
+	Debug      bool   `yaml:"debug"`
+	GitBackend string `yaml:"git_backend"` // "auto" | "native" | "go-git"
 }
 
 type DeviceConfig struct {
@@ -80,6 +80,7 @@ func DefaultConfig() *Config {
 			PassiveFPS: 30,
 			Timeout:    0,
 			Debug:      false,
+			GitBackend: "auto",
 		},
 		Device: DeviceConfig{
 			AutoDetect: true,
@@ -135,7 +136,7 @@ func ConfigDir(override string) string {
 	return platform.ConfigDir(override)
 }
 
-// LoadConfig reads config.yml from dir, creating it with defaults when absent.
+// LoadConfig reads .config.yml from dir, creating it with defaults when absent.
 // The directory is created automatically if it does not exist.
 func LoadConfig(dir string) (*Config, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -143,7 +144,7 @@ func LoadConfig(dir string) (*Config, error) {
 	}
 
 	cfg := DefaultConfig()
-	data, err := os.ReadFile(filepath.Join(dir, "config.yml"))
+	data, err := os.ReadFile(platform.ConfigFile(dir))
 	if os.IsNotExist(err) {
 		// First run -- write defaults so the user has a file to edit.
 		if werr := SaveConfig(cfg, dir); werr != nil {
@@ -160,12 +161,12 @@ func LoadConfig(dir string) (*Config, error) {
 	return cfg, nil
 }
 
-// SaveConfig writes cfg as config.yml inside dir.
+// SaveConfig writes cfg as .config.yml inside dir.
 func SaveConfig(cfg *Config, dir string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	f, err := os.Create(filepath.Join(dir, "config.yml"))
+	f, err := os.Create(platform.ConfigFile(dir))
 	if err != nil {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}

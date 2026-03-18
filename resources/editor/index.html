@@ -25,6 +25,7 @@
 		</div>
 		<div class="spacer"></div>
 		<div id="save-errors"></div>
+		<button class="btn-ghost" onclick="showPkgModal()">&#128230; Packages</button>
 		<button class="btn-ghost" onclick="showSettings()">&#9881; Config</button>
 		<button class="btn-ghost" onclick="reloadFromDisk()">Reload</button>
 		<button class="btn-success" onclick="saveLayout()">Save</button>
@@ -133,6 +134,38 @@
 	</div>
 
 	<div id="toast"></div>
+
+	<!-- ── Package Manager Modal ── -->
+	<div id="pkg-modal-overlay" onclick="if(event.target===this)hidePkgModal()" style="display:none">
+		<div id="pkg-modal">
+			<div id="pkg-modal-header">
+				<h2>Package Manager</h2>
+				<button class="btn-ghost" style="padding:2px 8px" onclick="hidePkgModal()">&#x2715;</button>
+			</div>
+
+			<!-- Install section -->
+			<div class="pkg-section">
+				<h4>Install Package</h4>
+				<div class="form-row" style="gap:8px">
+					<input id="pkg-install-url" type="text" placeholder="github.com/user/repo or github.com/user/repo@v1.0.0"
+						style="flex:1" onkeydown="if(event.key==='Enter')installPackage()">
+					<button class="btn-primary" onclick="installPackage()">Install</button>
+				</div>
+				<div id="pkg-install-status" style="font-size:.82rem;color:var(--txt3);min-height:1.2em;margin-top:4px"></div>
+			</div>
+
+			<!-- Installed list -->
+			<div class="pkg-section" style="flex:1;overflow:auto">
+				<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+					<h4 style="margin:0;flex:1">Installed Packages</h4>
+					<button class="btn-ghost" style="padding:2px 8px" onclick="refreshPkgList()">&#8635; Refresh</button>
+				</div>
+				<div id="pkg-installed-list">
+					<p style="color:var(--txt3);font-size:.82rem">Loading...</p>
+				</div>
+			</div>
+		</div>
+	</div>
 
 	<!-- Monaco loader (served via caching proxy) -->
 	<script src="/api/monaco/vs/loader.js"></script>

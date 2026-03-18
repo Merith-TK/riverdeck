@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/merith-tk/riverdeck/pkg/pkgmanager"
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting/modules"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	lua "github.com/yuin/gopher-lua"
@@ -172,9 +174,21 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 		}
 
 		// Boot daemon scripts now that packageLibPaths is fully populated.
-		fmt.Println("[*] Starting package daemons...")
+		// Daemons are opt-in: only started when packages.cfg.json has daemon_enabled=true.
+		pkgsCfg, cfgErr := pkgmanager.LoadPackagesCfg(platform.PackagesDir(m.configDir))
+		if cfgErr != nil {
+			fmt.Printf("[!] Warning: could not load packages.cfg.json: %v\n", cfgErr)
+			pkgsCfg = make(pkgmanager.PackagesCfg)
+		}
+		fmt.Println("[*] Starting package daemons (opt-in)...")
 		for _, pkg := range packages {
 			if pkg.DaemonScript == "" {
+				continue
+			}
+			// Determine config key: prefer source field in manifest, else pkg ID.
+			repoKey := pkg.Manifest.ID
+			if !pkgsCfg.IsDaemonEnabled(repoKey, "") {
+				fmt.Printf("[*] Daemon for %s is disabled (set daemon_enabled=true in packages.cfg.json to enable)\n", pkg.Manifest.ID)
 				continue
 			}
 			dRunner, dErr := NewScriptRunner(pkg.DaemonScript, m.device, m.configDir, m.packageLibPaths, m.store, pkg.DataDir)
@@ -192,7 +206,7 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 			m.daemonRunners = append(m.daemonRunners, dRunner)
 		}
 	} else {
-		fmt.Println("[*] No packages installed (.packages/ empty or absent)")
+		fmt.Println("[*] No packages installed (.config/packages/ empty or absent)")
 	}
 
 	// Check for boot animation script - runs synchronously
@@ -205,12 +219,12 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 
 	// Scan for all .lua files recursively
 	var scriptPaths []string
-	packagesDir := filepath.Join(m.configDir, ".packages")
+	packagesDir := platform.PackagesDir(m.configDir)
 	err := filepath.Walk(m.configDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Skip errors
 		}
-		// Skip the entire .packages/ tree - those scripts are managed
+		// Skip the entire .config/packages/ tree - those scripts are managed
 		// separately as daemon runners and Lua library files, not deck buttons.
 		if info.IsDir() && filepath.Clean(path) == filepath.Clean(packagesDir) {
 			return filepath.SkipDir

@@ -32,6 +32,7 @@ import (
 
 	"github.com/merith-tk/riverdeck/pkg/imaging"
 	"github.com/merith-tk/riverdeck/pkg/layout"
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	"github.com/merith-tk/riverdeck/pkg/wsdevice"
@@ -106,6 +107,9 @@ func (a *App) Init(configDir string) error {
 		absDir = dir
 	}
 	a.configPath = absDir
+
+	// Run one-time migration from old config layout to new structure.
+	migrateConfigDir(absDir)
 
 	// Load (or create) configuration.
 	config, err := LoadConfig(absDir)
@@ -195,7 +199,7 @@ func (a *App) Init(configDir string) error {
 
 	// Always refresh the bundled riverdeck package so templates are physically
 	// present on disk. Delete the old copy, then re-extract from the embed.
-	defaultPkgDest := filepath.Join(absDir, ".packages", "riverdeck")
+	defaultPkgDest := filepath.Join(platform.PackagesDir(absDir), "riverdeck")
 	if rmErr := os.RemoveAll(defaultPkgDest); rmErr != nil {
 		log.Printf("[!] Could not remove old riverdeck package: %v", rmErr)
 	}
@@ -452,4 +456,46 @@ func (a *App) Shutdown() {
 		a.device.Close()
 	}
 	streamdeck.Exit()
+}
+
+// migrateConfigDir performs one-time migrations from the old config directory
+// layout to the new structure on first boot after an upgrade:
+//
+//   - config.yml       → .config.yml
+//   - .packages/       → .config/packages/
+//   - .devices/        → .config/devices/
+func migrateConfigDir(configDir string) {
+	newConfig := platform.ConfigFile(configDir)
+	oldConfig := filepath.Join(configDir, "config.yml")
+	if _, err := os.Stat(oldConfig); err == nil {
+		if _, err2 := os.Stat(newConfig); os.IsNotExist(err2) {
+			if err3 := os.Rename(oldConfig, newConfig); err3 == nil {
+				log.Printf("[migration] config.yml → .config.yml")
+			}
+		}
+	}
+
+	newPkgs := platform.PackagesDir(configDir)
+	oldPkgs := filepath.Join(configDir, ".packages")
+	if _, err := os.Stat(oldPkgs); err == nil {
+		if _, err2 := os.Stat(newPkgs); os.IsNotExist(err2) {
+			if err3 := os.MkdirAll(filepath.Dir(newPkgs), 0755); err3 == nil {
+				if err4 := os.Rename(oldPkgs, newPkgs); err4 == nil {
+					log.Printf("[migration] .packages/ → .config/packages/")
+				}
+			}
+		}
+	}
+
+	newDevices := platform.DevicesDir(configDir)
+	oldDevices := filepath.Join(configDir, ".devices")
+	if _, err := os.Stat(oldDevices); err == nil {
+		if _, err2 := os.Stat(newDevices); os.IsNotExist(err2) {
+			if err3 := os.MkdirAll(filepath.Dir(newDevices), 0755); err3 == nil {
+				if err4 := os.Rename(oldDevices, newDevices); err4 == nil {
+					log.Printf("[migration] .devices/ → .config/devices/")
+				}
+			}
+		}
+	}
 }
