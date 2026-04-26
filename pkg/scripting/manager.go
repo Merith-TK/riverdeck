@@ -175,10 +175,10 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 
 		// Boot daemon scripts now that packageLibPaths is fully populated.
 		// Daemons are opt-in: only started when packages.cfg.json has daemon_enabled=true.
-		pkgsCfg, cfgErr := pkgmanager.LoadPackagesCfg(platform.PackagesDir(m.configDir))
+		pkgsCfg, cfgErr := pkgmanager.LoadPackages(platform.PackagesDir(m.configDir))
 		if cfgErr != nil {
-			fmt.Printf("[!] Warning: could not load packages.cfg.json: %v\n", cfgErr)
-			pkgsCfg = make(pkgmanager.PackagesCfg)
+			fmt.Printf("[!] Warning: could not load packages.json: %v\n", cfgErr)
+			pkgsCfg = make(pkgmanager.PackagesFile)
 		}
 		fmt.Println("[*] Starting package daemons (opt-in)...")
 		for _, pkg := range packages {

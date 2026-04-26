@@ -353,14 +353,14 @@ func (r *ScriptRunner) registerPackageSearcher() {
 			return 1
 		}
 
-		// Load the index from disk on each require() to pick up newly installed packages.
-		idx, err := pkgmanager.LoadIndex(packagesDir)
-		if err != nil || len(idx) == 0 {
-			L.Push(lua.LString("no package index found"))
+		// Load packages.json on each require() to pick up newly installed packages.
+		pf, err := pkgmanager.LoadPackages(packagesDir)
+		if err != nil || len(pf) == 0 {
+			L.Push(lua.LString("no packages.json found"))
 			return 1
 		}
 
-		candidate, ok := idx.Resolve(moduleName, packagesDir)
+		candidate, ok := pf.Resolve(moduleName, packagesDir)
 		if !ok {
 			L.Push(lua.LString("not found in package index: " + moduleName))
 			return 1

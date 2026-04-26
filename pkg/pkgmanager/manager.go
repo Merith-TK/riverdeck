@@ -71,10 +71,10 @@ func (m *Manager) Install(rawURL string) error {
 		return fmt.Errorf("clone: %w", err)
 	}
 
-	// Update index.
-	idx, _ := LoadIndex(m.packagesDir)
+	// Load (or create) packages.json, then add entry for the new package.
+	pf, _ := LoadPackages(m.packagesDir)
 	shorthand := m.shorthand(src)
-	entry := IndexEntry{Path: filepath.ToSlash(src.RepoDir)}
+	entry := PackageEntry{Path: filepath.ToSlash(src.RepoDir)}
 
 	// Read manifest to detect multi-package repos and populate Packages list.
 	manifest, _ := readManifest(targetDir)
@@ -83,9 +83,12 @@ func (m *Manager) Install(rawURL string) error {
 			entry.Packages = append(entry.Packages, p.ID)
 		}
 	}
-	idx[shorthand] = entry
-	if err := SaveIndex(m.packagesDir, idx); err != nil {
-		log.Printf("[pkgmanager] warning: could not save index: %v", err)
+	// Default: daemon disabled.
+	disabled := false
+	entry.DaemonEnabled = &disabled
+	pf[shorthand] = entry
+	if err := SavePackages(m.packagesDir, pf); err != nil {
+		log.Printf("[pkgmanager] warning: could not save packages.json: %v", err)
 	}
 
 	// Update lock.
@@ -95,18 +98,7 @@ func (m *Manager) Install(rawURL string) error {
 		log.Printf("[pkgmanager] warning: could not save lock: %v", err)
 	}
 
-	// Add entry to packages.cfg.json with daemon disabled by default.
-	cfg, _ := LoadPackagesCfg(m.packagesDir)
-	repoKey := filepath.ToSlash(src.RepoDir)
-	if _, exists := cfg[repoKey]; !exists {
-		disabled := false
-		cfg[repoKey] = RepoCfg{DaemonEnabled: &disabled}
-		if err := SavePackagesCfg(m.packagesDir, cfg); err != nil {
-			log.Printf("[pkgmanager] warning: could not save packages.cfg.json: %v", err)
-		}
-	}
-
-	log.Printf("[pkgmanager] installed %s", repoKey)
+	log.Printf("[pkgmanager] installed %s", filepath.ToSlash(src.RepoDir))
 	return nil
 }
 
@@ -134,19 +126,14 @@ func (m *Manager) removeByDir(repoDir string) error {
 	RemovePackageLock(lf, m.packagesDir, targetDir)
 	_ = SaveLock(m.packagesDir, lf)
 
-	// Remove from index.
-	idx, _ := LoadIndex(m.packagesDir)
-	for k, entry := range idx {
+	// Remove from packages.json.
+	pf, _ := LoadPackages(m.packagesDir)
+	for k, entry := range pf {
 		if filepath.ToSlash(entry.Path) == filepath.ToSlash(repoDir) {
-			delete(idx, k)
+			delete(pf, k)
 		}
 	}
-	_ = SaveIndex(m.packagesDir, idx)
-
-	// Remove from packages.cfg.json.
-	cfg, _ := LoadPackagesCfg(m.packagesDir)
-	delete(cfg, filepath.ToSlash(repoDir))
-	_ = SavePackagesCfg(m.packagesDir, cfg)
+	_ = SavePackages(m.packagesDir, pf)
 
 	log.Printf("[pkgmanager] removed %s", repoDir)
 	return nil
@@ -203,7 +190,7 @@ type InstalledPackage struct {
 
 // listPackages walks the packages dir and returns discovered packages.
 func listPackages(packagesDir string) ([]InstalledPackage, error) {
-	cfg, _ := LoadPackagesCfg(packagesDir)
+	cfg, _ := LoadPackages(packagesDir)
 	var result []InstalledPackage
 
 	_ = filepath.Walk(packagesDir, func(path string, info os.FileInfo, err error) error {

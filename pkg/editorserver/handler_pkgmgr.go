@@ -128,14 +128,14 @@ func (s *Server) handlePkgDaemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	packagesDir := platform.PackagesDir(s.cfg.ConfigDir)
-	cfg, err := pkgmanager.LoadPackagesCfg(packagesDir)
+	pf, err := pkgmanager.LoadPackages(packagesDir)
 	if err != nil {
-		http.Error(w, "config load error: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "packages.json load error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	cfg.SetDaemonEnabled(req.Repo, req.Sub, req.Enabled)
-	if err := pkgmanager.SavePackagesCfg(packagesDir, cfg); err != nil {
-		http.Error(w, "config save error: "+err.Error(), http.StatusInternalServerError)
+	pf.SetDaemonEnabled(req.Repo, req.Sub, req.Enabled)
+	if err := pkgmanager.SavePackages(packagesDir, pf); err != nil {
+		http.Error(w, "packages.json save error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

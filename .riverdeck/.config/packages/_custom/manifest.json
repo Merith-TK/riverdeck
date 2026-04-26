@@ -1,0 +1,10 @@
+{
+  "id": "_custom",
+  "name": "Custom Templates",
+  "description": "User-created and duplicated templates stored locally.",
+  "version": "1.0.0",
+  "order_index": 9999,
+  "provides": {
+    "templates": []
+  }
+}

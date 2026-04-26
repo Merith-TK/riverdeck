@@ -215,11 +215,15 @@ func ScanPackages(configDir string) ([]*ScannedPackage, error) {
 		pkgDir := filepath.Join(packagesDir, entry.Name())
 		pkg := &ScannedPackage{Dir: pkgDir}
 
-		// Parse manifest.json (optional - missing file is not an error).
-		manifestPath := filepath.Join(pkgDir, "manifest.json")
+		// Parse riverdeck.pkg.manifest.json (preferred) or manifest.json (legacy).
+		// The new filename takes priority; fall back to the old name for compatibility.
+		manifestPath := filepath.Join(pkgDir, "riverdeck.pkg.manifest.json")
+		if _, statErr := os.Stat(manifestPath); os.IsNotExist(statErr) {
+			manifestPath = filepath.Join(pkgDir, "manifest.json")
+		}
 		if data, readErr := os.ReadFile(manifestPath); readErr == nil {
 			if jsonErr := json.Unmarshal(data, &pkg.Manifest); jsonErr != nil {
-				fmt.Printf("[!] Package %s: invalid manifest.json: %v\n", entry.Name(), jsonErr)
+				fmt.Printf("[!] Package %s: invalid manifest: %v\n", entry.Name(), jsonErr)
 				// Fall through - still try to use lib/ even with a bad manifest.
 			}
 		}

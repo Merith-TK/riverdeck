@@ -1,0 +1,10 @@
+{
+  "riverdeck": {
+    "path": "riverdeck",
+    "daemon_enabled": false
+  },
+  "riverdeck.ytmdesktop": {
+    "path": "riverdeck.ytmdesktop",
+    "daemon_enabled": false
+  }
+}

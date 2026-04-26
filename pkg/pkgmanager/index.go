@@ -7,11 +7,12 @@ import (
 	"strings"
 )
 
-// indexFile is the name of the import-resolver index inside the packages dir.
-const indexFile = ".index.json"
+// packagesFile is the combined index + config file name inside the packages dir.
+const packagesFile = "packages.json"
 
-// IndexEntry is one entry in the import resolver index.
-type IndexEntry struct {
+// PackageEntry is one entry in packages.json, combining import-resolver info
+// with per-installation settings.
+type PackageEntry struct {
 	// Path is the physical directory under .config/packages/.
 	// For git-installed packages this is the RepoDir, e.g.
 	// "github.com/merith-tk/riverdeck-packages".
@@ -20,61 +21,110 @@ type IndexEntry struct {
 	// Packages lists sub-package IDs within a multi-package repo.
 	// Nil or empty for single-package repos.
 	Packages []string `json:"packages,omitempty"`
+
+	// DaemonEnabled controls whether the package-level daemon is started.
+	// For multi-package repos, use SubPackages instead.
+	DaemonEnabled *bool `json:"daemon_enabled,omitempty"`
+
+	// UpdateChannel is "release" (track tags) or "branch:<name>" (dev mode).
+	UpdateChannel string `json:"update_channel,omitempty"`
+
+	// PinnedTag pins a specific version tag when UpdateChannel is "release".
+	PinnedTag string `json:"pinned_tag,omitempty"`
+
+	// SubPackages holds per-sub-package settings for multi-package repos.
+	SubPackages map[string]SubEntry `json:"sub_packages,omitempty"`
 }
 
-// ImportIndex maps shorthand import names to physical package locations.
-//
-// Example entry: "merith-tk.riverdeck-packages" → {Path: "github.com/…", Packages: ["ytmd","obs"]}
-type ImportIndex map[string]IndexEntry
+// SubEntry holds per-sub-package settings inside a multi-package repo.
+type SubEntry struct {
+	DaemonEnabled *bool `json:"daemon_enabled,omitempty"`
+}
 
-// LoadIndex reads the .index.json from the packages directory.
-// Returns an empty index if the file does not exist.
-func LoadIndex(packagesDir string) (ImportIndex, error) {
-	data, err := os.ReadFile(filepath.Join(packagesDir, indexFile))
+// PackagesFile is the in-memory representation of packages.json.
+// Keys are dot-separated shorthand import names, e.g. "merith-tk.riverdeck-packages".
+type PackagesFile map[string]PackageEntry
+
+// LoadPackages reads packages.json from the packages directory.
+// Returns an empty PackagesFile if the file does not exist.
+func LoadPackages(packagesDir string) (PackagesFile, error) {
+	data, err := os.ReadFile(filepath.Join(packagesDir, packagesFile))
 	if os.IsNotExist(err) {
-		return make(ImportIndex), nil
+		return make(PackagesFile), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var idx ImportIndex
-	if err := json.Unmarshal(data, &idx); err != nil {
+	var pf PackagesFile
+	if err := json.Unmarshal(data, &pf); err != nil {
 		return nil, err
 	}
-	if idx == nil {
-		idx = make(ImportIndex)
+	if pf == nil {
+		pf = make(PackagesFile)
 	}
-	return idx, nil
+	return pf, nil
 }
 
-// SaveIndex writes idx to the packages directory.
-func SaveIndex(packagesDir string, idx ImportIndex) error {
+// SavePackages writes pf to the packages directory as packages.json.
+func SavePackages(packagesDir string, pf PackagesFile) error {
 	if err := os.MkdirAll(packagesDir, 0755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(idx, "", "  ")
+	data, err := json.MarshalIndent(pf, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(packagesDir, indexFile), data, 0644)
+	return os.WriteFile(filepath.Join(packagesDir, packagesFile), data, 0644)
 }
 
-// Resolve resolves a dot-separated Lua module name to an absolute file path
-// using the index. Returns ("", false) when the module name is not managed by
-// the index.
+// IsDaemonEnabled returns whether the daemon is enabled for a given key and
+// optional sub-package name. sub may be empty for single-package repos.
+// Defaults to false when no explicit setting exists.
+func (pf PackagesFile) IsDaemonEnabled(key, sub string) bool {
+	entry, ok := pf[key]
+	if !ok {
+		return false
+	}
+	if sub != "" {
+		if sp, ok := entry.SubPackages[sub]; ok && sp.DaemonEnabled != nil {
+			return *sp.DaemonEnabled
+		}
+		return false
+	}
+	if entry.DaemonEnabled != nil {
+		return *entry.DaemonEnabled
+	}
+	return false
+}
+
+// SetDaemonEnabled sets the daemon-enabled flag for a key (and optional sub-package).
+func (pf PackagesFile) SetDaemonEnabled(key, sub string, enabled bool) {
+	entry := pf[key]
+	if sub != "" {
+		if entry.SubPackages == nil {
+			entry.SubPackages = make(map[string]SubEntry)
+		}
+		sp := entry.SubPackages[sub]
+		sp.DaemonEnabled = &enabled
+		entry.SubPackages[sub] = sp
+	} else {
+		entry.DaemonEnabled = &enabled
+	}
+	pf[key] = entry
+}
+
+// Resolve resolves a dot-separated Lua module name to an absolute file path.
+// Returns ("", false) when the module name is not in the packages file.
 //
-// Resolution algorithm for "merith-tk.riverdeck-packages.ytmd.lib.api":
-//  1. Try progressively longer dot-prefixes as shorthand keys.
-//  2. On match, consume the next segment as sub-package (if Packages is non-empty).
-//  3. Remaining segments → path with "/" separator + ".lua".
-//
-// Full path: packagesDir/<entry.Path>[/<subpkg>]/<rest>.lua
-func (idx ImportIndex) Resolve(moduleName, packagesDir string) (string, bool) {
-	// Try each possible prefix length.
+// Resolution for "merith-tk.riverdeck-packages.ytmd.lib.api":
+//  1. Try progressively longer dot-prefixes as keys.
+//  2. On match, consume next segment as sub-package if Packages is non-empty.
+//  3. Remaining segments → path joined with "/" + ".lua".
+func (pf PackagesFile) Resolve(moduleName, packagesDir string) (string, bool) {
 	dotParts := strings.Split(moduleName, ".")
 	for prefixLen := len(dotParts); prefixLen >= 1; prefixLen-- {
-		shorthand := strings.Join(dotParts[:prefixLen], ".")
-		entry, ok := idx[shorthand]
+		key := strings.Join(dotParts[:prefixLen], ".")
+		entry, ok := pf[key]
 		if !ok {
 			continue
 		}
@@ -84,21 +134,16 @@ func (idx ImportIndex) Resolve(moduleName, packagesDir string) (string, bool) {
 		// If the entry has sub-packages, the next segment is the sub-package dir.
 		if len(entry.Packages) > 0 && len(rest) > 0 {
 			subpkg := rest[0]
-			found := false
 			for _, p := range entry.Packages {
 				if p == subpkg {
-					found = true
+					base = filepath.Join(base, subpkg)
+					rest = rest[1:]
 					break
 				}
-			}
-			if found {
-				base = filepath.Join(base, subpkg)
-				rest = rest[1:]
 			}
 		}
 
 		if len(rest) == 0 {
-			// Module name resolved to a directory, not a file — no resolution.
 			return "", false
 		}
 
