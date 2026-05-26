@@ -1,5 +1,14 @@
 -- temperature.lua - Shows CPU temperature (if available)
 -- background() polls the shell every 10s; passive() just reads state (fast).
+--
+-- passive(key, state) return table fields:
+--   color      = {r, g, b}           background fill color (0-255 each); default black
+--   icon       = "pkg://pkg#name"    named icon from package registry, composited over color
+--              = "./assets/img.png"  path relative to this script's directory
+--              = "/path/icon.svg"    path relative to the config root directory
+--   text       = "string"            text drawn on top (supports \n for line breaks)
+--   text_color = {r, g, b}           text color (default: white {255,255,255})
+-- Render order (bottom to top): color -> icon -> text
 
 local shell  = require("shell")
 local system = require("system")
@@ -43,7 +52,7 @@ function script.passive(key, state)
         color = {255, 165, 0}
     end
     local display = state.temperature and string.format("%.0f", temp) or "--"
-    return { color = color, text = string.format("TEMP\n%s°C", display), text_color = {255, 255, 255} }
+    return { color = color, icon = "pkg://riverdeck#temperature", text = string.format("TEMP\n%s°C", display), text_color = {255, 255, 255} }
 end
 
 return script

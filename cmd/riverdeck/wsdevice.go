@@ -65,6 +65,9 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 	}
 	defer scriptMgr.Shutdown()
 
+	// Supply package info to the navigator for pkg:// icon resolution.
+	nav.SetPackages(scriptMgr.PackageInfos())
+
 	// Wire key-update callbacks so passive/trigger results paint onto the WS device.
 	scriptMgr.SetKeyUpdateCallback(func(keyIndex int, appearance *scripting.KeyAppearance) {
 		pkgappearance.ApplyKeyAppearance(dev, nav, keyIndex, appearance)

@@ -1,6 +1,15 @@
 -- shutdown.lua - System shutdown with double-press confirmation
 --
 -- WARNING: Actual shutdown command commented out for safety
+--
+-- passive(key, state) return table fields:
+--   color      = {r, g, b}           background fill color (0-255 each); default black
+--   icon       = "pkg://pkg#name"    named icon from package registry, composited over color
+--              = "./assets/img.png"  path relative to this script's directory
+--              = "/path/icon.svg"    path relative to the config root directory
+--   text       = "string"            text drawn on top (supports \n for line breaks)
+--   text_color = {r, g, b}           text color (default: white {255,255,255})
+-- Render order (bottom to top): color -> icon -> text
 
 local system = require("system")
 local shell  = require("shell")
@@ -10,9 +19,9 @@ local script = {}
 
 function script.passive(key, state)
     if state.confirming then
-        return { color = {200, 0, 0}, text = "SURE?", text_color = {255, 255, 255} }
+        return { color = {200, 0, 0}, icon = "pkg://riverdeck#shutdown", text = "SURE?", text_color = {255, 255, 255} }
     else
-        return { color = {100, 30, 30}, text = "OFF", text_color = {200, 200, 200} }
+        return { color = {100, 30, 30}, icon = "pkg://riverdeck#shutdown", text = "OFF", text_color = {200, 200, 200} }
     end
 end
 

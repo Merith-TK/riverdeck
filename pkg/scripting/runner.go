@@ -43,6 +43,7 @@ import (
 	"github.com/merith-tk/riverdeck/pkg/lualib"
 	"github.com/merith-tk/riverdeck/pkg/pkgmanager"
 	"github.com/merith-tk/riverdeck/pkg/platform"
+	"github.com/merith-tk/riverdeck/pkg/resolver"
 	"github.com/merith-tk/riverdeck/pkg/scripting/modules"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	lua "github.com/yuin/gopher-lua"
@@ -58,11 +59,22 @@ const (
 )
 
 // KeyAppearance defines how a key should look (returned by passive).
+//
+// Render order (bottom to top): color → icon → text
+//
+// Passive function return table fields:
+//
+//	color      = {r, g, b}           background fill color (0-255 each); default black
+//	icon       = "pkg://pkg#name"    named icon from package registry, composited over color
+//	           = "./assets/img.png"  path relative to this script's directory
+//	           = "/path/icon.svg"    path relative to the config root directory
+//	text       = "string"            text drawn on top (supports \n for line breaks)
+//	text_color = {r, g, b}           text color (default: white {255,255,255})
 type KeyAppearance struct {
-	Color     [3]int // RGB color (0-255)
-	Text      string // Text to display
-	TextColor [3]int // Text color RGB
-	Image     string // Path to image file (future)
+	Color     [3]int // RGB background fill color (0-255)
+	Icon      string // Resolved absolute path to icon image (composited over color)
+	Text      string // Text to display on top
+	TextColor [3]int // Text color RGB (default white)
 }
 
 // ScriptRunner manages a single Lua script's lifecycle.
@@ -121,6 +133,10 @@ type ScriptRunner struct {
 	// Both are set by ScriptManager before registerModules() is called.
 	packageLibPaths []string
 	store           *modules.StoreModule
+
+	// packages is used to resolve pkg:// icon URIs in parseAppearance.
+	// Set by ScriptManager after Boot() completes.
+	packages []resolver.PackageInfo
 
 	// packageDataDir is the absolute path to this package's data/ directory.
 	// When non-empty, the pkg_data module is preloaded and scoped to this dir.
@@ -717,15 +733,18 @@ func (r *ScriptRunner) parseAppearance(tbl *lua.LTable) *KeyAppearance {
 		appearance.TextColor = [3]int{255, 255, 255}
 	}
 
-	if imgVal := r.L.GetField(tbl, "image"); imgVal.Type() == lua.LTString {
-		imgPath := imgVal.String()
-		if strings.HasPrefix(imgPath, "http://") || strings.HasPrefix(imgPath, "https://") {
-			appearance.Image = imgPath
-		} else if !filepath.IsAbs(imgPath) {
-			appearance.Image = filepath.Join(filepath.Dir(r.ScriptPath), imgPath)
-		} else {
-			appearance.Image = imgPath
+	// Parse icon: resolved using the resolver so that all URI forms are supported:
+	//   pkg://pkgname#iconname   - named icon from package registry
+	//   ./relative/path.png      - relative to this script's directory
+	//   /config/root/path.svg    - relative to the config root directory
+	if iconVal := r.L.GetField(tbl, "icon"); iconVal.Type() == lua.LTString {
+		raw := iconVal.String()
+		scriptDir := filepath.Dir(r.ScriptPath)
+		resolved, err := resolver.ResolveString(raw, scriptDir, r.configDir, r.packages)
+		if err == nil {
+			appearance.Icon = resolved
 		}
+		// On error, Icon stays empty — button falls back to color+text rendering.
 	}
 
 	return appearance

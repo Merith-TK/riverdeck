@@ -28,6 +28,7 @@ import (
 
 	"github.com/merith-tk/riverdeck/pkg/pkgmanager"
 	"github.com/merith-tk/riverdeck/pkg/platform"
+	"github.com/merith-tk/riverdeck/pkg/resolver"
 	"github.com/merith-tk/riverdeck/pkg/scripting/modules"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	lua "github.com/yuin/gopher-lua"
@@ -142,6 +143,45 @@ func (m *ScriptManager) Packages() []*ScannedPackage {
 	return m.installedPackages
 }
 
+// PackageInfos returns the installed packages as resolver.PackageInfo slices,
+// suitable for passing to LayoutNavigator.SetPackages or ScriptRunner.packages.
+func (m *ScriptManager) PackageInfos() []resolver.PackageInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.packageInfos()
+}
+
+// packageInfos converts installedPackages to []resolver.PackageInfo for use by
+// script runners resolving pkg:// icon URIs.
+// Must be called with m.mu held (at least read-locked).
+func (m *ScriptManager) packageInfos() []resolver.PackageInfo {
+	pkgs := m.installedPackages
+	if len(pkgs) == 0 {
+		return nil
+	}
+	infos := make([]resolver.PackageInfo, 0, len(pkgs))
+	for _, p := range pkgs {
+		info := resolver.PackageInfo{
+			ID:  p.Manifest.ID,
+			Dir: p.Dir,
+		}
+		if len(p.ResolvedIcons) > 0 {
+			// Convert absolute resolved icon paths back to relative so the
+			// resolver can join them with pkg.Dir at resolve time.
+			// Actually we store them as absolute already — expose them directly
+			// via a copy so resolver.Resolve can skip the join.
+			// Instead, pass the raw relative map from the manifest and let
+			// resolver.Resolve do the join against Dir.
+			info.Icons = make(map[string]string, len(p.Manifest.Provides.Icons))
+			for name, rel := range p.Manifest.Provides.Icons {
+				info.Icons[name] = rel
+			}
+		}
+		infos = append(infos, info)
+	}
+	return infos
+}
+
 // Boot scans the config directory and loads all scripts.
 // Runs boot animation if _boot.lua exists, then loads all scripts.
 func (m *ScriptManager) Boot(ctx context.Context) error {
@@ -212,6 +252,7 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 				fmt.Printf("[!] Package %s: failed to load daemon: %v\n", pkg.Manifest.ID, dErr)
 				continue
 			}
+			dRunner.packages = m.packageInfos()
 			if !dRunner.HasDaemon() {
 				fmt.Printf("[!] Package %s: daemon.lua has no daemon() function\n", pkg.Manifest.ID)
 				dRunner.Close()
@@ -219,8 +260,7 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 			}
 			fmt.Printf("[*] Starting daemon: %s (%s)\n", pkg.Manifest.ID, pkg.DaemonScript)
 			dRunner.StartDaemon(m.ctx)
-			m.daemonRunners = append(m.daemonRunners, dRunner)
-		}
+			m.daemonRunners = append(m.daemonRunners, dRunner)		}
 	} else {
 		fmt.Println("[*] No packages installed (.config/packages/ empty or absent)")
 	}
@@ -268,6 +308,7 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 			fmt.Printf("[!] Failed to load %s: %v\n", filepath.Base(scriptPath), err)
 			continue
 		}
+		runner.packages = m.packageInfos()
 
 		// Set refresh callback
 		runner.SetRefreshCallback(m.requestRefresh)
@@ -306,6 +347,7 @@ func (m *ScriptManager) runBootAnimation() {
 		fmt.Printf("[!] Boot animation failed: %v\n", err)
 		return
 	}
+	runner.packages = m.packageInfos()
 	defer runner.Close()
 
 	// Call the boot function from the module table
@@ -454,7 +496,7 @@ func appearanceEqual(a, b *KeyAppearance) bool {
 	return a.Color == b.Color &&
 		a.Text == b.Text &&
 		a.TextColor == b.TextColor &&
-		a.Image == b.Image
+		a.Icon == b.Icon
 }
 
 // SetVisibleScripts updates which scripts are currently visible on the display.

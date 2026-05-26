@@ -170,19 +170,12 @@ func (s *DeviceSession) keyUpdateCallback(keyIndex int, appearance *scripting.Ke
 		return
 	}
 
-	if appearance.Image != "" {
-		if strings.ToLower(filepath.Ext(appearance.Image)) == ".gif" {
+	if appearance.Icon != "" {
+		if strings.ToLower(filepath.Ext(appearance.Icon)) == ".gif" {
 			s.startGIFAnim(keyIndex, appearance)
 			return
 		}
 		s.stopGIFAnim(keyIndex)
-		img, err := imaging.LoadImage(appearance.Image)
-		if err == nil {
-			resized := s.device.ResizeImage(img)
-			_ = s.device.SetImage(keyIndex, resized)
-			return
-		}
-		log.Printf("Device %s: image load failed: %v", s.deviceID, err)
 	} else {
 		s.stopGIFAnim(keyIndex)
 	}
@@ -202,7 +195,7 @@ func (s *DeviceSession) stopGIFAnim(keyIndex int) {
 }
 
 func (s *DeviceSession) startGIFAnim(keyIndex int, appearance *scripting.KeyAppearance) {
-	data, err := imaging.LoadGIFFrames(appearance.Image)
+	data, err := imaging.LoadGIFFrames(appearance.Icon)
 	if err != nil {
 		log.Printf("Device %s: GIF load failed for key %d: %v", s.deviceID, keyIndex, err)
 		return
@@ -891,7 +884,9 @@ func (s *DeviceSession) createNavigator() streamdeck.NavigatorIface {
 			log.Printf("[!] Device %s: layout load error (%v), falling back to folder navigation", s.deviceID, err)
 		} else if lay != nil && len(lay.Pages) > 0 {
 			log.Printf("[*] Device %s: Navigation mode: layout (%d pages)", s.deviceID, len(lay.Pages))
-			return streamdeck.NewLayoutNavigator(s.device, s.configDir, lay)
+			nav := streamdeck.NewLayoutNavigator(s.device, s.configDir, lay)
+			nav.SetPackages(s.scriptMgr.PackageInfos())
+			return nav
 		} else if style == "layout" {
 			lay = layout.NewEmpty()
 			if serr := layout.SaveLayout(s.configDir, "default", lay); serr != nil {
@@ -899,7 +894,9 @@ func (s *DeviceSession) createNavigator() streamdeck.NavigatorIface {
 			} else {
 				log.Printf("[*] Device %s: Navigation mode: layout (new empty layout created)", s.deviceID)
 			}
-			return streamdeck.NewLayoutNavigator(s.device, s.configDir, lay)
+			nav := streamdeck.NewLayoutNavigator(s.device, s.configDir, lay)
+			nav.SetPackages(s.scriptMgr.PackageInfos())
+			return nav
 		}
 	}
 

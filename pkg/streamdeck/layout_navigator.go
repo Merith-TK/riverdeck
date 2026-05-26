@@ -400,17 +400,17 @@ func (n *LayoutNavigator) resolveScript(btn *layout.LayoutButton) (string, error
 	if resolver.IsLuaForbidden(ref) {
 		return "", fmt.Errorf("web Lua scripts are forbidden: %s", btn.Script)
 	}
-	return resolver.Resolve(ref, n.configDir, n.packages)
+	return resolver.Resolve(ref, n.configDir, n.configDir, n.packages)
 }
 
 // renderButton builds the image for a single layout button.
 func (n *LayoutNavigator) renderButton(btn *layout.LayoutButton) image.Image {
 	label := btn.Label
 
-	// Try to load an icon image via the resolver (supports pkg:// URIs).
+	// Try to load an icon image via the resolver (supports pkg://#iconname URIs).
 	if btn.Icon != "" {
 		ref := resolver.Parse(btn.Icon)
-		if iconPath, err := resolver.Resolve(ref, n.configDir, n.packages); err == nil {
+		if iconPath, err := resolver.Resolve(ref, n.configDir, n.configDir, n.packages); err == nil {
 			if img, err := imaging.LoadImage(iconPath); err == nil {
 				resized := n.dev.ResizeImage(img)
 				if label != "" {
