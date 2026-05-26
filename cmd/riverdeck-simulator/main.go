@@ -19,10 +19,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/google/uuid"
 	"github.com/merith-tk/riverdeck/pkg/platform"
+	"github.com/merith-tk/riverdeck/pkg/wsclient"
 )
 
 // SimSpec holds the subset of a ProbeResult needed to run the simulator.
@@ -80,7 +79,10 @@ func main() {
 	// Resolve device ID: flag > persisted file > generate new.
 	devID := *deviceID
 	if devID == "" {
-		devID = loadOrCreateDeviceID()
+		home, _ := os.UserHomeDir()
+		dir := filepath.Join(home, ".riverdeck")
+		_ = os.MkdirAll(dir, 0755)
+		devID = wsclient.LoadOrCreateDeviceID(dir, ".sim-device-id")
 	}
 
 	log.Printf("Simulating: %s  (%d cols x %d rows, %d keys, %dpx, %s)",
@@ -105,26 +107,6 @@ func main() {
 
 	// Block forever -- goroutines drive the work.
 	select {}
-}
-
-// loadOrCreateDeviceID reads ~/.riverdeck/.sim-device-id or generates and saves a new one.
-func loadOrCreateDeviceID() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return uuid.New().String()
-	}
-	dir := filepath.Join(home, ".riverdeck")
-	_ = os.MkdirAll(dir, 0755)
-	path := filepath.Join(dir, ".sim-device-id")
-
-	if data, err := os.ReadFile(path); err == nil {
-		if id := strings.TrimSpace(string(data)); id != "" {
-			return id
-		}
-	}
-	id := uuid.New().String()
-	_ = os.WriteFile(path, []byte(id+"\n"), 0644)
-	return id
 }
 
 // loadProbeSpec reads a probe JSON file and returns the SimSpec at the given index.

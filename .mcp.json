@@ -3,7 +3,7 @@
     "riverdeck-wsdevice": {
       "command": "go",
       "args": ["run", "./cmd/mcp-wsdevice/"],
-      "cwd": "/workspaces/riverdeck",
+      "cwd": "/workspace/github.com/Merith-TK/riverdeck",
       "type": "stdio"
     }
   }

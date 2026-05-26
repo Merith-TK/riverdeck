@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/merith-tk/riverdeck/pkg/layout"
+	"github.com/merith-tk/riverdeck/pkg/wsclient"
 )
 
 func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -32,7 +35,7 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	// Load or generate persistent device ID.
 	deviceID := overrideID
 	if deviceID == "" {
-		deviceID = loadOrCreateDeviceID(configDir)
+		deviceID = wsclient.LoadOrCreateDeviceID(configDir, ".mcp-device-id")
 	}
 
 	addr := fmt.Sprintf("ws://localhost:%d/ws", port)
@@ -50,7 +53,7 @@ func toolConnect(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	state.labels = make(map[int]string)
 	state.frameData = make(map[int]string)
 	state.messages = nil
-	hello := buildHelloMsg(deviceID)
+	hello := wsclient.BuildHelloMsg(deviceID, "Claude MCP Client", 3, 5, 64, []string{"png"})
 	state.inputIDs = make([]string, len(hello.Inputs))
 	for i, inp := range hello.Inputs {
 		state.inputIDs[i] = inp.ID
@@ -220,15 +223,42 @@ func toolPressKey(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	return mcp.NewToolResultText(result), nil
 }
 
-func toolReadLayout(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func toolSetBrightness(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	value, err := req.RequireInt("value")
+	if err != nil {
+		return mcp.NewToolResultError("value parameter required (0-100)"), nil
+	}
+	if value < 0 || value > 100 {
+		return mcp.NewToolResultError("value must be 0-100"), nil
+	}
+
 	state.mu.Lock()
-	deviceID := state.deviceID
-	configDir := state.configDir
 	connected := state.connected
 	state.mu.Unlock()
 
-	if !connected || deviceID == "" {
+	if !connected {
 		return mcp.NewToolResultError("not connected (call rd_connect first)"), nil
+	}
+
+	if err := sendJSON(map[string]any{"type": "setbrightness", "value": value}); err != nil {
+		return mcp.NewToolResultError("send setbrightness: " + err.Error()), nil
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Brightness set to %d%%", value)), nil
+}
+
+func toolReadLayout(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	state.mu.Lock()
+	savedDeviceID := state.deviceID
+	savedConfigDir := state.configDir
+	state.mu.Unlock()
+
+	deviceID := req.GetString("device_id", savedDeviceID)
+	configDir := req.GetString("config_dir", savedConfigDir)
+	if configDir == "" {
+		configDir = defaultConfigDir()
+	}
+	if deviceID == "" {
+		return mcp.NewToolResultError("no device_id available (call rd_connect first or provide device_id parameter)"), nil
 	}
 
 	lay, err := layout.LoadForDevice(configDir, deviceID)
@@ -246,6 +276,60 @@ func toolReadLayout(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResu
 	return mcp.NewToolResultText(fmt.Sprintf("layout for id=%s (%s):\n\n%s", deviceID, configDir, string(data))), nil
 }
 
+func toolReadConfig(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	state.mu.Lock()
+	savedConfigDir := state.configDir
+	state.mu.Unlock()
+
+	configDir := req.GetString("config_dir", savedConfigDir)
+	if configDir == "" {
+		configDir = defaultConfigDir()
+	}
+
+	configPath := filepath.Join(configDir, "config.yml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("read config from %s: %v", configPath, err)), nil
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Config from %s:\n\n%s", configPath, string(data))), nil
+}
+
+func toolListDevices(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	state.mu.Lock()
+	savedConfigDir := state.configDir
+	state.mu.Unlock()
+
+	configDir := req.GetString("config_dir", savedConfigDir)
+	if configDir == "" {
+		configDir = defaultConfigDir()
+	}
+
+	devicesDir := filepath.Join(configDir, ".config", "devices")
+	entries, err := os.ReadDir(devicesDir)
+	if err != nil {
+		return mcp.NewToolResultText(fmt.Sprintf("No device data found in %s (%v)", devicesDir, err)), nil
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Devices in %s:\n", devicesDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			devPath := filepath.Join(devicesDir, entry.Name(), "device.json")
+			if devData, readErr := os.ReadFile(devPath); readErr == nil {
+				var geo map[string]any
+				if json.Unmarshal(devData, &geo) == nil {
+					name, _ := geo["name"].(string)
+					source, _ := geo["source"].(string)
+					fmt.Fprintf(&sb, "  %s  name=%q source=%s\n", entry.Name()[:8], name, source)
+				}
+			} else {
+				fmt.Fprintf(&sb, "  %s  (no device.json)\n", entry.Name()[:8])
+			}
+		}
+	}
+	return mcp.NewToolResultText(sb.String()), nil
+}
+
 func toolListInputs(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	state.mu.Lock()
 	connected := state.connected
@@ -257,7 +341,7 @@ func toolListInputs(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResu
 		return mcp.NewToolResultError("not connected (call rd_connect first)"), nil
 	}
 
-	hello := buildHelloMsg(deviceID)
+	hello := wsclient.BuildHelloMsg(deviceID, "Claude MCP Client", 3, 5, 64, []string{"png"})
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Inputs declared by this MCP client (id=%s):\n", deviceID)
 	for i, inp := range hello.Inputs {

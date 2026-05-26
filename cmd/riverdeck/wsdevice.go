@@ -1,11 +1,10 @@
 package main
 
 import (
-	"image/color"
 	"log"
 	"time"
 
-	"github.com/merith-tk/riverdeck/pkg/imaging"
+	pkgappearance "github.com/merith-tk/riverdeck/pkg/appearance"
 	"github.com/merith-tk/riverdeck/pkg/layout"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
@@ -60,32 +59,7 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 
 	// Wire key-update callbacks so passive/trigger results paint onto the WS device.
 	scriptMgr.SetKeyUpdateCallback(func(keyIndex int, appearance *scripting.KeyAppearance) {
-		if appearance == nil {
-			return
-		}
-		if appearance.Image != "" {
-			if img, loadErr := imaging.LoadImage(appearance.Image); loadErr == nil {
-				_ = dev.SetImage(keyIndex, dev.ResizeImage(img))
-				return
-			}
-		}
-		c := color.RGBA{
-			R: uint8(appearance.Color[0]),
-			G: uint8(appearance.Color[1]),
-			B: uint8(appearance.Color[2]),
-			A: 255,
-		}
-		if appearance.Text != "" {
-			img := nav.CreateTextImageWithColors(appearance.Text, c, color.RGBA{
-				R: uint8(appearance.TextColor[0]),
-				G: uint8(appearance.TextColor[1]),
-				B: uint8(appearance.TextColor[2]),
-				A: 255,
-			})
-			_ = dev.SetImage(keyIndex, img)
-		} else {
-			_ = dev.SetKeyColor(keyIndex, c)
-		}
+		pkgappearance.ApplyKeyAppearance(dev, nav, keyIndex, appearance)
 	})
 
 	nav.SetScriptValidator(scriptMgr.IsUsableScript)

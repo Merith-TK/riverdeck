@@ -58,13 +58,41 @@ func main() {
 		),
 	), toolPressKey)
 
-	s.AddTool(mcp.NewTool("rd_read_layout",
-		mcp.WithDescription("Read and return the layout.json for the currently connected device from the riverdeck config directory."),
-	), toolReadLayout)
-
 	s.AddTool(mcp.NewTool("rd_list_inputs",
 		mcp.WithDescription("List the inputs (buttons) this MCP client declared in its hello message, with their IDs, grid positions, and display capabilities."),
 	), toolListInputs)
+
+	s.AddTool(mcp.NewTool("rd_set_brightness",
+		mcp.WithDescription("Set the brightness of the connected riverdeck device."),
+		mcp.WithNumber("value",
+			mcp.Required(),
+			mcp.Description("Brightness percentage (0-100)"),
+		),
+	), toolSetBrightness)
+
+	s.AddTool(mcp.NewTool("rd_read_layout",
+		mcp.WithDescription("Read the layout.json for the given device from the riverdeck config directory. Does not require an active connection — provide config_dir and device_id explicitly, or use defaults from the last rd_connect call."),
+		mcp.WithString("config_dir",
+			mcp.Description("Path to the riverdeck config directory (default: from last rd_connect, or ~/.riverdeck)"),
+		),
+		mcp.WithString("device_id",
+			mcp.Description("Device ID (default: from last rd_connect, or the MCP persistent device id)"),
+		),
+	), toolReadLayout)
+
+	s.AddTool(mcp.NewTool("rd_read_config",
+		mcp.WithDescription("Read the riverdeck config.yml file from the config directory."),
+		mcp.WithString("config_dir",
+			mcp.Description("Path to the riverdeck config directory (default: from last rd_connect, or ~/.riverdeck)"),
+		),
+	), toolReadConfig)
+
+	s.AddTool(mcp.NewTool("rd_list_devices",
+		mcp.WithDescription("List all device geometry files stored in the riverdeck config directory."),
+		mcp.WithString("config_dir",
+			mcp.Description("Path to the riverdeck config directory (default: from last rd_connect, or ~/.riverdeck)"),
+		),
+	), toolListDevices)
 
 	if err := server.ServeStdio(s); err != nil {
 		log.Fatalf("mcp-wsdevice: %v", err)

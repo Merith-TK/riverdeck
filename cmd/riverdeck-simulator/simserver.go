@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/merith-tk/riverdeck/pkg/wsclient"
 )
 
 // ── SSE broadcaster ───────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ func (s *SimState) runSession() error {
 	defer conn.Close()
 
 	// Send hello.
-	hello := s.buildHello()
+	hello := wsclient.BuildHelloMsg(s.deviceID, s.spec.ModelName, s.spec.Rows, s.spec.Cols, s.spec.PixelSize, []string{"png", "jpeg"})
 	data, _ := json.Marshal(hello)
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		return fmt.Errorf("send hello: %w", err)
@@ -175,37 +176,6 @@ func (s *SimState) runSession() error {
 	}
 }
 
-// buildHello constructs the hello message declaring our device identity.
-func (s *SimState) buildHello() map[string]any {
-	inputs := make([]map[string]any, s.spec.Keys)
-	for i := 0; i < s.spec.Keys; i++ {
-		col := i % s.spec.Cols
-		row := i / s.spec.Cols
-		inputs[i] = map[string]any{
-			"id":   fmt.Sprintf("btn%d", i),
-			"type": "button",
-			"x":    col,
-			"y":    row,
-			"display": map[string]any{
-				"image":       true,
-				"imageWidth":  s.spec.PixelSize,
-				"imageHeight": s.spec.PixelSize,
-				"text":        true,
-				"formats":     []string{"png", "jpeg"},
-			},
-		}
-	}
-	return map[string]any{
-		"type":    "hello",
-		"id":      s.deviceID,
-		"name":    s.spec.ModelName,
-		"rows":    s.spec.Rows,
-		"cols":    s.spec.Cols,
-		"formats": []string{"png", "jpeg"},
-		"inputs":  inputs,
-	}
-}
-
 // handleServerMessage dispatches a JSON message from riverdeck.
 func (s *SimState) handleServerMessage(raw []byte) {
 	var msg struct {
@@ -223,7 +193,7 @@ func (s *SimState) handleServerMessage(raw []byte) {
 
 	switch msg.Type {
 	case "frame":
-		keyIndex := inputIDToIndex(msg.ID)
+		keyIndex := wsclient.InputIDToIndex(msg.ID)
 		if keyIndex < 0 {
 			log.Printf("frame: unrecognised id=%s", msg.ID)
 			return
@@ -242,7 +212,7 @@ func (s *SimState) handleServerMessage(raw []byte) {
 		s.sse.send("setimage", string(payload))
 
 	case "label":
-		keyIndex := inputIDToIndex(msg.ID)
+		keyIndex := wsclient.InputIDToIndex(msg.ID)
 		if keyIndex < 0 {
 			return
 		}
@@ -281,15 +251,6 @@ func (s *SimState) cmdClear() {
 	}
 	s.mu.Unlock()
 	s.sse.send("clear", `{}`)
-}
-
-// inputIDToIndex maps "btnN" → N.  Returns -1 if not parseable.
-func inputIDToIndex(id string) int {
-	var n int
-	if _, err := fmt.Sscanf(id, "btn%d", &n); err != nil {
-		return -1
-	}
-	return n
 }
 
 // ── HTTP + SSE server (browser side) ─────────────────────────────────────────

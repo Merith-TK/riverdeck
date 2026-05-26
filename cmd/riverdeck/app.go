@@ -18,8 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"image/color"
-	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -30,11 +28,13 @@ import (
 	"syscall"
 	"time"
 
+	pkgappearance "github.com/merith-tk/riverdeck/pkg/appearance"
 	"github.com/merith-tk/riverdeck/pkg/imaging"
 	"github.com/merith-tk/riverdeck/pkg/layout"
 	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
+	"github.com/merith-tk/riverdeck/pkg/util"
 	"github.com/merith-tk/riverdeck/pkg/wsdevice"
 	"github.com/merith-tk/riverdeck/resources"
 )
@@ -204,7 +204,7 @@ func (a *App) Init(configDir string) error {
 		log.Printf("[!] Could not remove old riverdeck package: %v", rmErr)
 	}
 	pkgFS := resources.DefaultPackagesFS()
-	if extractErr := extractFS(pkgFS, defaultPkgDest, "riverdeck"); extractErr != nil {
+	if extractErr := util.ExtractFS(pkgFS, defaultPkgDest, "riverdeck"); extractErr != nil {
 		log.Printf("[!] Could not extract default riverdeck package: %v", extractErr)
 	} else {
 		log.Printf("[*] Refreshed bundled riverdeck package at %s", defaultPkgDest)
@@ -315,29 +315,8 @@ func (a *App) setupKeyUpdateCallback() {
 			a.stopGIFAnim(keyIndex)
 		}
 
-		// Apply appearance to key
-		c := color.RGBA{
-			R: uint8(appearance.Color[0]),
-			G: uint8(appearance.Color[1]),
-			B: uint8(appearance.Color[2]),
-			A: 255,
-		}
-		if appearance.Text != "" {
-			// Create text image with appearance colors
-			img := a.nav.CreateTextImageWithColors(
-				appearance.Text,
-				c,
-				color.RGBA{
-					R: uint8(appearance.TextColor[0]),
-					G: uint8(appearance.TextColor[1]),
-					B: uint8(appearance.TextColor[2]),
-					A: 255,
-				},
-			)
-			a.device.SetImage(keyIndex, img)
-		} else {
-			a.device.SetKeyColor(keyIndex, c)
-		}
+		// Apply appearance to key (shared text/color rendering)
+		pkgappearance.ApplyKeyAppearance(a.device, a.nav, keyIndex, appearance)
 	})
 }
 
@@ -397,49 +376,6 @@ func (a *App) Run() error {
 
 	fmt.Println("Done!")
 	return nil
-}
-
-// extractFS copies all files from srcFS into destDir, preserving directory
-// structure.  prefix is stripped from the front of each path (e.g. "riverdeck"
-// when srcFS is rooted at packages/ but files live at riverdeck/**).
-// The dest directory and any missing parents are created automatically.
-func extractFS(srcFS fs.FS, destDir string, prefix string) error {
-	return fs.WalkDir(srcFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		// Build destination path: strip the bundle prefix component.
-		rel := path
-		if prefix != "" {
-			rel = strings.TrimPrefix(rel, prefix)
-			rel = strings.TrimPrefix(rel, "/")
-		}
-		if rel == "" || rel == "." {
-			return nil // skip root entry
-		}
-		dest := filepath.Join(destDir, filepath.FromSlash(rel))
-		if d.IsDir() {
-			return os.MkdirAll(dest, 0755)
-		}
-		// Ensure parent directory exists.
-		if mkErr := os.MkdirAll(filepath.Dir(dest), 0755); mkErr != nil {
-			return mkErr
-		}
-		// Open source file.
-		srcFile, openErr := srcFS.Open(path)
-		if openErr != nil {
-			return openErr
-		}
-		defer srcFile.Close()
-		// Write destination file (always overwrite).
-		destFile, createErr := os.Create(dest)
-		if createErr != nil {
-			return createErr
-		}
-		defer destFile.Close()
-		_, copyErr := io.Copy(destFile, srcFile)
-		return copyErr
-	})
 }
 
 // Shutdown cleans up resources.
