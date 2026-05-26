@@ -391,11 +391,14 @@ func (n *Navigator) RenderPage() error {
 		if i >= len(n.contentKeys) {
 			break
 		}
-		if item.IsFolder {
+		if item.IsFolder && item.Script == "" {
+			// Folder with no .directory.lua: static blue label
 			images[n.contentKeys[i]] = n.createTextImage(truncateName(item.Name, 8), color.RGBA{30, 80, 180, 255})
-		} else {
+		} else if !item.IsFolder {
+			// Regular script button: static green label (passive loop will repaint)
 			images[n.contentKeys[i]] = n.createTextImage(truncateName(item.Name, 8), color.RGBA{30, 130, 80, 255})
 		}
+		// Folder with .directory.lua: leave nil (black) — passive loop renders it
 	}
 	// Any remaining content keys (no item) stay nil -> black
 
