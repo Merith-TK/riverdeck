@@ -165,6 +165,32 @@ func toolGetState(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
+func toolGetFrame(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	key, err := req.RequireInt("key")
+	if err != nil {
+		return mcp.NewToolResultError("key parameter required"), nil
+	}
+
+	state.mu.Lock()
+	connected := state.connected
+	frame := state.frameData[key]
+	label := state.labels[key]
+	inputID := ""
+	if key >= 0 && key < len(state.inputIDs) {
+		inputID = state.inputIDs[key]
+	}
+	state.mu.Unlock()
+
+	if !connected {
+		return mcp.NewToolResultError("not connected"), nil
+	}
+	if frame == "" {
+		return mcp.NewToolResultText(fmt.Sprintf("key %d (%s): no frame data available", key, inputID)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("key=%d id=%s label=%q data_len=%d\nbase64:%s", key, inputID, label, len(frame), frame)), nil
+}
+
 func toolPressKey(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	key, err := req.RequireInt("key")
 	if err != nil {

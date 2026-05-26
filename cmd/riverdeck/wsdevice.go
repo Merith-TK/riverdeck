@@ -28,12 +28,6 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 	// Resolve session config dir based on multi-device mode.
 	sessionDir := platform.DeviceSessionDir(a.configPath, id, a.config.Device.MultiMode)
 
-	lay, err := layout.LoadForDevice(sessionDir, id)
-	if err != nil {
-		log.Printf("[wsdevice] layout load error id=%s: %v", id, err)
-		lay = layout.NewEmpty()
-	}
-
 	// Save device geometry so the editor can show this device's grid.
 	go func() {
 		inputs := dev.Inputs()
@@ -55,7 +49,29 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 		}
 	}()
 
-	nav := streamdeck.NewLayoutNavigator(dev, sessionDir, lay)
+	// Choose navigator based on navigation style.
+	style := a.config.UI.NavigationStyle
+	useLayout := false
+	switch style {
+	case "layout":
+		useLayout = true
+	case "auto":
+		useLayout = layout.Exists(sessionDir)
+	}
+
+	var nav streamdeck.NavigatorIface
+	layoutPageCount := 0
+	if useLayout {
+		lay, err := layout.LoadForDevice(sessionDir, id)
+		if err != nil {
+			log.Printf("[wsdevice] layout load error id=%s: %v", id, err)
+			lay = layout.NewEmpty()
+		}
+		layoutPageCount = len(lay.Pages)
+		nav = streamdeck.NewLayoutNavigator(dev, sessionDir, lay)
+	} else {
+		nav = streamdeck.NewNavigator(dev, sessionDir)
+	}
 
 	// Boot a script manager bound to this WS device.
 	// Packages always come from the global root.
@@ -65,8 +81,10 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 	}
 	defer scriptMgr.Shutdown()
 
-	// Supply package info to the navigator for pkg:// icon resolution.
-	nav.SetPackages(scriptMgr.PackageInfos())
+	// Supply package info to the layout navigator for pkg:// icon resolution.
+	if ln, ok := nav.(*streamdeck.LayoutNavigator); ok {
+		ln.SetPackages(scriptMgr.PackageInfos())
+	}
 
 	// Wire key-update callbacks so passive/trigger results paint onto the WS device.
 	scriptMgr.SetKeyUpdateCallback(func(keyIndex int, appearance *scripting.KeyAppearance) {
@@ -81,7 +99,11 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 	scriptMgr.SetVisibleScripts(nav.GetVisibleScripts())
 	scriptMgr.StartPassiveLoop()
 
-	log.Printf("[wsdevice] session started id=%s layout=%d pages", id, len(lay.Pages))
+	if useLayout {
+		log.Printf("[wsdevice] session started id=%s layout=%d pages", id, layoutPageCount)
+	} else {
+		log.Printf("[wsdevice] session started id=%s filesystem mode", id)
+	}
 
 	events := make(chan streamdeck.KeyEvent, 10)
 	dev.ListenKeys(dev.Context(), events)

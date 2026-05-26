@@ -160,23 +160,20 @@ func (a *App) Init(configDir string) error {
 		return fmt.Errorf("no usable Stream Deck devices could be opened")
 	}
 
-	// Start WebSocket device server when enabled and in layout/auto mode.
+	// Start WebSocket device server when enabled (any navigation style).
 	if a.config.Network.WebSocketEnabled {
-		style := a.config.UI.NavigationStyle
-		if style == "layout" || style == "auto" {
-			port := a.config.Network.WebSocketPort
-			if port == 0 {
-				port = 9000
-			}
-			a.wsServer = wsdevice.NewServer(port, func(wsDev *wsdevice.Device) {
-				a.runWSDevice(wsDev)
-			})
-			a.wsServer.SetBrightness(a.config.Application.Brightness)
-			if startErr := a.wsServer.Start(a.ctx); startErr != nil {
-				log.Printf("[!] WS device server failed to start: %v", startErr)
-			} else {
-				log.Printf("[*] WebSocket device server listening on :%d  (connect: ws://localhost:%d/ws)", port, port)
-			}
+		port := a.config.Network.WebSocketPort
+		if port == 0 {
+			port = 9000
+		}
+		a.wsServer = wsdevice.NewServer(port, func(wsDev *wsdevice.Device) {
+			a.runWSDevice(wsDev)
+		})
+		a.wsServer.SetBrightness(a.config.Application.Brightness)
+		if startErr := a.wsServer.Start(a.ctx); startErr != nil {
+			log.Printf("[!] WS device server failed to start: %v", startErr)
+		} else {
+			log.Printf("[*] WebSocket device server listening on :%d  (connect: ws://localhost:%d/ws)", port, port)
 		}
 	}
 

@@ -50,6 +50,14 @@ func main() {
 		mcp.WithDescription("Return the current connection status, current button labels, frame update timestamps, and recent message log."),
 	), toolGetState)
 
+	s.AddTool(mcp.NewTool("rd_get_frame",
+		mcp.WithDescription("Return the raw base64-encoded frame (image) data for a specific key. Decode and save to a .png file to view the icon."),
+		mcp.WithNumber("key",
+			mcp.Required(),
+			mcp.Description("Physical key index (0-based)"),
+		),
+	), toolGetFrame)
+
 	s.AddTool(mcp.NewTool("rd_press_key",
 		mcp.WithDescription("Simulate a physical button press (sends input press then release events). Reports which keys received frame or label updates as a result."),
 		mcp.WithNumber("key",
