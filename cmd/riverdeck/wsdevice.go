@@ -6,6 +6,7 @@ import (
 
 	pkgappearance "github.com/merith-tk/riverdeck/pkg/appearance"
 	"github.com/merith-tk/riverdeck/pkg/layout"
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	"github.com/merith-tk/riverdeck/pkg/wsdevice"
@@ -18,10 +19,16 @@ import (
 // Each session gets its own ScriptManager bound to the WS device so that
 // script passive loops, triggers, and background workers run independently
 // per client — identical to how a hardware device session works.
+//
+// The session's config root is resolved via DeviceSessionDir so that
+// individual-filesystem mode is respected for WS clients too.
 func (a *App) runWSDevice(dev *wsdevice.Device) {
 	id := dev.ID()
 
-	lay, err := layout.LoadForDevice(a.configPath, id)
+	// Resolve session config dir based on multi-device mode.
+	sessionDir := platform.DeviceSessionDir(a.configPath, id, a.config.Device.MultiMode)
+
+	lay, err := layout.LoadForDevice(sessionDir, id)
 	if err != nil {
 		log.Printf("[wsdevice] layout load error id=%s: %v", id, err)
 		lay = layout.NewEmpty()
@@ -48,10 +55,11 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 		}
 	}()
 
-	nav := streamdeck.NewLayoutNavigator(dev, a.configPath, lay)
+	nav := streamdeck.NewLayoutNavigator(dev, sessionDir, lay)
 
 	// Boot a script manager bound to this WS device.
-	scriptMgr := scripting.NewScriptManager(dev, a.configPath, a.config.Application.PassiveFPS)
+	// Packages always come from the global root.
+	scriptMgr := scripting.NewScriptManager(dev, id, sessionDir, a.configPath, a.config.Application.PassiveFPS)
 	if err := scriptMgr.Boot(dev.Context()); err != nil {
 		log.Printf("[wsdevice] script boot error id=%s: %v", id, err)
 	}

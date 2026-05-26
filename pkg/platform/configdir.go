@@ -49,6 +49,23 @@ func DevicesDir(configDir string) string {
 	return filepath.Join(configDir, ".config", "devices")
 }
 
+// DeviceSessionDir returns the effective config root for a device session
+// based on the configured multi-device mode.
+//
+//	mode "shared"     -> rootDir                     (all devices share one config tree)
+//	mode "layout"     -> rootDir                     (layout.json devices map routes by UUID)
+//	mode "individual" -> rootDir / .device / <id>    (each device gets its own config subtree)
+//
+// The returned path is not created; callers should os.MkdirAll when needed.
+func DeviceSessionDir(rootDir, deviceID, mode string) string {
+	switch mode {
+	case "individual":
+		return filepath.Join(rootDir, ".device", deviceID)
+	default:
+		return rootDir
+	}
+}
+
 // ConfigFile returns the path to the main application config file.
 //
 //	<configDir>/.config.yml

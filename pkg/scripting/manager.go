@@ -43,7 +43,9 @@ type ScriptManager struct {
 	mu sync.RWMutex
 
 	device     streamdeck.DeviceIface
-	configDir  string
+	deviceID   string   // serial/UUID, exposed to Lua via streamdeck.device_id()
+	configDir  string   // session config root (where scripts live)
+	packagesRoot string // global root (where .config/packages/ lives)
 	passiveFPS int
 
 	// Installed .packages/ library paths - prepended to every runner's package.path.
@@ -98,13 +100,18 @@ type ScriptManager struct {
 }
 
 // NewScriptManager creates a new script manager.
-func NewScriptManager(dev streamdeck.DeviceIface, configDir string, passiveFPS int) *ScriptManager {
+// deviceID is the serial/UUID of the device running this session, exposed to Lua.
+// configDir is where scripts are loaded from (may be per-device in individual mode).
+// packagesRoot is where .config/packages/ lives (always the global root).
+func NewScriptManager(dev streamdeck.DeviceIface, deviceID, configDir, packagesRoot string, passiveFPS int) *ScriptManager {
 	if passiveFPS <= 0 {
 		passiveFPS = DefaultPassiveFPS
 	}
 	return &ScriptManager{
 		device:         dev,
+		deviceID:       deviceID,
 		configDir:      configDir,
+		packagesRoot:   packagesRoot,
 		passiveFPS:     passiveFPS,
 		runners:        make(map[string]*ScriptRunner),
 		visibleScripts: make(map[string]int),
@@ -112,6 +119,13 @@ func NewScriptManager(dev streamdeck.DeviceIface, configDir string, passiveFPS i
 		store:          modules.NewStoreModule(),
 		refreshCh:      make(chan struct{}, 1),
 	}
+}
+
+// DeviceID returns the serial/UUID of the device this manager is bound to.
+func (m *ScriptManager) DeviceID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.deviceID
 }
 
 // SetKeyUpdateCallback sets the callback for passive key updates.
@@ -135,8 +149,10 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.mu.Unlock()
 
-	// Discover installed packages in .packages/ and build library search paths.
-	packages, pkgErr := ScanPackages(m.configDir)
+	// Discover installed packages in .config/packages/ and build library search paths.
+	// Packages are always scanned from packagesRoot (the global root), not configDir,
+	// so that individual device sessions share the same installed packages.
+	packages, pkgErr := ScanPackages(m.packagesRoot)
 	if pkgErr != nil {
 		fmt.Printf("[!] Warning: failed to scan packages: %v\n", pkgErr)
 	}
@@ -175,7 +191,7 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 
 		// Boot daemon scripts now that packageLibPaths is fully populated.
 		// Daemons are opt-in: only started when packages.cfg.json has daemon_enabled=true.
-		pkgsCfg, cfgErr := pkgmanager.LoadPackages(platform.PackagesDir(m.configDir))
+		pkgsCfg, cfgErr := pkgmanager.LoadPackages(platform.PackagesDir(m.packagesRoot))
 		if cfgErr != nil {
 			fmt.Printf("[!] Warning: could not load packages.json: %v\n", cfgErr)
 			pkgsCfg = make(pkgmanager.PackagesFile)
@@ -217,9 +233,9 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 		m.runBootAnimation()
 	}
 
-	// Scan for all .lua files recursively
+	// Scan for all .lua files recursively (from the session configDir)
 	var scriptPaths []string
-	packagesDir := platform.PackagesDir(m.configDir)
+	packagesDir := platform.PackagesDir(m.packagesRoot)
 	err := filepath.Walk(m.configDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Skip errors

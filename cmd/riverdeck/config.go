@@ -3,7 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/knadh/koanf/providers/confmap"
+	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/v2"
 	"github.com/merith-tk/riverdeck/pkg/platform"
 	"gopkg.in/yaml.v3"
 )
@@ -32,6 +36,7 @@ type DeviceConfig struct {
 	AutoDetect bool   `yaml:"auto_detect"`
 	Path       string `yaml:"path"`
 	Model      string `yaml:"model"`
+	MultiMode  string `yaml:"multi_mode"` // "shared" | "individual" | "layout"
 }
 
 type ScriptingConfig struct {
@@ -86,6 +91,7 @@ func DefaultConfig() *Config {
 			AutoDetect: true,
 			Path:       "",
 			Model:      "",
+			MultiMode:  "shared",
 		},
 		Scripting: ScriptingConfig{
 			EnableBackground:     true,
@@ -136,7 +142,36 @@ func ConfigDir(override string) string {
 	return platform.ConfigDir(override)
 }
 
-// LoadConfig reads .config.yml from dir, creating it with defaults when absent.
+// applyEnvOverrides overlays environment variables onto the config struct.
+// Env vars use the prefix RIVERDECK_ with __ as the nested-key delimiter:
+//
+//	RIVERDECK_APPLICATION__BRIGHTNESS=80
+//	RIVERDECK_DEVICE__MULTI_MODE=individual
+//	RIVERDECK_NETWORK__WEBSOCKET_ENABLED=true
+func applyEnvOverrides(cfg *Config) {
+	k := koanf.New(".")
+
+	// Seed koanf with current config values so Unmarshal preserves them
+	// when no env override exists.
+	current, err := yaml.Marshal(cfg)
+	if err != nil {
+		return
+	}
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(current, &raw); err != nil {
+		return
+	}
+	_ = k.Load(confmap.Provider(raw, "."), nil)
+
+	// Overlay environment variables.
+	_ = k.Load(env.Provider("RIVERDECK_", "__", func(s string) string {
+		return strings.Replace(strings.ToLower(s), "__", ".", -1)
+	}), nil)
+
+	_ = k.UnmarshalWithConf("", cfg, koanf.UnmarshalConf{Tag: "yaml"})
+}
+
+// LoadConfig reads .config.yml from dir, applying defaults and env overrides.
 // The directory is created automatically if it does not exist.
 func LoadConfig(dir string) (*Config, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -158,7 +193,74 @@ func LoadConfig(dir string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return cfg, fmt.Errorf("failed to parse config: %w", err)
 	}
+
+	// Apply environment variable overrides on top of file config.
+	applyEnvOverrides(cfg)
+
 	return cfg, nil
+}
+
+// LoadDeviceConfig merges a device-level .config.yml on top of a global config.
+// Only device-scoped fields (brightness, passive_fps, timeout, nav_style) are
+// overridden; all other fields retain their global values.
+// Returns a shallow copy so the global config is not mutated.
+func LoadDeviceConfig(global *Config, deviceConfigDir string) *Config {
+	merged := *global // shallow copy
+
+	path := platform.ConfigFile(deviceConfigDir)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return &merged
+	}
+	if err != nil {
+		return &merged
+	}
+
+	var devCfg struct {
+		Application *struct {
+			Brightness *int    `yaml:"brightness"`
+			PassiveFPS *int    `yaml:"passive_fps"`
+			Timeout    *int    `yaml:"timeout"`
+		} `yaml:"application"`
+		UI *struct {
+			NavigationStyle *string            `yaml:"navigation_style"`
+			ShowHiddenFiles *bool              `yaml:"show_hidden_files"`
+			Labels          map[string]string  `yaml:"labels"`
+		} `yaml:"ui"`
+	}
+	if err := yaml.Unmarshal(data, &devCfg); err != nil {
+		return &merged
+	}
+
+	if devCfg.Application != nil {
+		if devCfg.Application.Brightness != nil {
+			merged.Application.Brightness = *devCfg.Application.Brightness
+		}
+		if devCfg.Application.PassiveFPS != nil {
+			merged.Application.PassiveFPS = *devCfg.Application.PassiveFPS
+		}
+		if devCfg.Application.Timeout != nil {
+			merged.Application.Timeout = *devCfg.Application.Timeout
+		}
+	}
+	if devCfg.UI != nil {
+		if devCfg.UI.NavigationStyle != nil {
+			merged.UI.NavigationStyle = *devCfg.UI.NavigationStyle
+		}
+		if devCfg.UI.ShowHiddenFiles != nil {
+			merged.UI.ShowHiddenFiles = *devCfg.UI.ShowHiddenFiles
+		}
+		if devCfg.UI.Labels != nil {
+			if merged.UI.Labels == nil {
+				merged.UI.Labels = devCfg.UI.Labels
+			} else {
+				for k, v := range devCfg.UI.Labels {
+					merged.UI.Labels[k] = v
+				}
+			}
+		}
+	}
+	return &merged
 }
 
 // SaveConfig writes cfg as .config.yml inside dir.
