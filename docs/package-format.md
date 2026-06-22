@@ -1,22 +1,22 @@
 # Riverdeck Package Format
 
-> **Version:** 1.0  
-> **Date:** 2026-03-11
+> **Version:** 1.1
 
 ---
 
 ## Overview
 
-A Riverdeck **package** is a directory inside `<configDir>/.packages/` that
+A Riverdeck **package** is a directory inside `<configDir>/.config/packages/` that
 bundles Lua libraries, button templates, icons, and (optionally) a background
 daemon.  The package system lets third-party authors distribute reusable
-functionality that end-users install by dropping a directory into the
-`.packages/` folder.
+functionality that end-users install via the package manager or by manually
+placing a directory into the packages folder.
 
 ```
-<configDir>/
-  .packages/
-    vendor.pkgname/               ← Package root (directory name = default ID)
+~/.config/riverdeck/
+  .config/
+    packages/
+      vendor.pkgname/               ← Package root (directory name = default ID)
       manifest.json               ← Package metadata (optional but recommended)
       lib/                        ← Lua libraries (auto-added to package.path)
         mylib.lua
@@ -176,13 +176,13 @@ In **folder mode**, both live in a sibling `.config.json` file:
 
 Any `.lua` file placed in the `lib/` directory of a package is
 automatically discoverable via `require()`.  Riverdeck adds every
-`.packages/*/lib/` path to the Lua `package.path` for all script
+`.config/packages/*/lib/` path to the Lua `package.path` for all script
 runners.
 
 ```lua
 -- In any button script:
 local mylib = require("mylib")
--- Resolves to .packages/vendor.pkgname/lib/mylib.lua
+-- Resolves to .config/packages/vendor.pkgname/lib/mylib.lua
 ```
 
 ---
@@ -274,12 +274,12 @@ When Riverdeck encounters a `pkg://` URI (in layout button `script`,
 ### Script / template URIs — `pkg://pkgID/relative/path`
 
 1. Parse the URI: `pkg://<packageID>/<relative-path>`
-2. Find the installed package with matching ID in `.packages/`
+2. Find the installed package with matching ID in `.config/packages/`
 3. Join the package root with the relative path
 4. Return the absolute filesystem path
 
 Example: `pkg://riverdeck/templates/home.lua`
-→ `<configDir>/.packages/riverdeck/templates/home.lua`
+→ `<configDir>/.config/packages/riverdeck/templates/home.lua`
 
 ### Icon URIs — `pkg://pkgID#iconName`
 
@@ -290,7 +290,7 @@ Example: `pkg://riverdeck/templates/home.lua`
 5. Return the absolute filesystem path
 
 Example: `pkg://riverdeck#cpu`
-→ `<configDir>/.packages/riverdeck/icons/cpu.svg`
+→ `<configDir>/.config/packages/riverdeck/icons/cpu.svg`
 
 ### Config-root-relative paths — `/path/to/file`
 
@@ -306,7 +306,7 @@ A leading `./` means relative to the directory containing the Lua script.
 ## Example: Minimal Package
 
 ```
-.packages/
+.config/packages/
   mytools/
     manifest.json
     templates/
@@ -352,7 +352,7 @@ return M
 ## Example: Full Package with Daemon
 
 ```
-.packages/
+.config/packages/
   homeassistant/
     manifest.json
     lib/

@@ -1,12 +1,18 @@
-# Websocket Client Devices
+# WebSocket Client Devices
 
-Websocket client devices are "fake" devices that connect to the RiverDeck websocket and inform RiverDeck of their layout. They are meant to allow creating custom devices that can be used with RiverDeck without needing to implement a full driver for them.
+WebSocket client devices connect to the Riverdeck WebSocket server, declare their grid size and input layout, and receive image/label updates in return. This lets anything that can open a WebSocket act as a Riverdeck device without needing a full native driver.
 
-This means someone can make their own device driver for hardware not yet supported by RiverDeck and use the websocket client device to connect it. Examples include:
-- A mobile app used as a RiverDeck device
-- A web app used as a RiverDeck device
-- A Raspberry Pi with GPIO buttons wired up as inputs
-- A Stream Deck plugin bridging into RiverDeck
+The protocol is intentionally minimal: the client just declares how many rows and columns it has and what inputs it provides. How the client physically renders images and responds to label updates is entirely its own concern.
+
+Examples of what can be built with this:
+- A mobile app used as a Riverdeck device
+- A web app used as a Riverdeck device
+- A Raspberry Pi Zero W with GPIO buttons wired up, connecting to a host running Riverdeck over the network
+- A microcontroller with a small display, forwarding button presses and rendering frames
+- A Stream Deck plugged into a Pi Zero W that proxies it to Riverdeck over Wi-Fi
+- A bridge to hardware not yet supported natively by Riverdeck
+
+> **Note:** The `web/` and `android/` subdirectories in this folder are placeholders for future reference client implementations. They are currently empty.
 
 Websocket client devices only support **layout mode** -- folder mode is not supported.
 
