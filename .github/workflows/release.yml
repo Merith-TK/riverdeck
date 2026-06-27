@@ -53,6 +53,13 @@ jobs:
             libwebkit2gtk-4.0-dev \
             libudev-dev upx
 
+      # ---------- Lint & Test ----------
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -v -count=1 -coverprofile=coverage.out ./pkg/...
+
       # ---------- Build ----------
       - name: Build
         run: mage build

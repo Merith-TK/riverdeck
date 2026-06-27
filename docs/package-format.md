@@ -1,22 +1,22 @@
 # Riverdeck Package Format
 
-> **Version:** 1.0  
-> **Date:** 2026-03-11
+> **Version:** 1.1
 
 ---
 
 ## Overview
 
-A Riverdeck **package** is a directory inside `<configDir>/.packages/` that
+A Riverdeck **package** is a directory inside `<configDir>/.config/packages/` that
 bundles Lua libraries, button templates, icons, and (optionally) a background
 daemon.  The package system lets third-party authors distribute reusable
-functionality that end-users install by dropping a directory into the
-`.packages/` folder.
+functionality that end-users install via the package manager or by manually
+placing a directory into the packages folder.
 
 ```
-<configDir>/
-  .packages/
-    vendor.pkgname/               ← Package root (directory name = default ID)
+~/.config/riverdeck/
+  .config/
+    packages/
+      vendor.pkgname/               ← Package root (directory name = default ID)
       manifest.json               ← Package metadata (optional but recommended)
       lib/                        ← Lua libraries (auto-added to package.path)
         mylib.lua
@@ -50,7 +50,10 @@ the ID and the display name, and `lib/` discovery still works.
   "provides": {
     "libraries": ["lib/mylib.lua"],
     "buttons":   ["templates/volume_up.lua"],
-    "icon_packs": ["icons"],
+    "icons": {
+      "vol-up":   "icons/vol-up.png",
+      "vol-down": "icons/vol-down.png"
+    },
     "templates": [
       {
         "id": "volume_up",
@@ -88,7 +91,7 @@ the ID and the display name, and `lib/` discovery still works.
 | `order_index` | `int` | No | Controls editor package browser sort order. Lower values first. |
 | `provides.libraries` | `string[]` | No | Relative paths to Lua library files (informational). |
 | `provides.buttons` | `string[]` | No | Relative paths to standalone button scripts (informational). |
-| `provides.icon_packs` | `string[]` | No | Relative paths to directories of icon images. |
+| `provides.icons` | `map[string]string` | No | Named icon registry: `{ "icon-name": "icons/file.png" }`. Values are package-root-relative paths. |
 | `provides.templates` | `ButtonTemplate[]` | No | Inline button template definitions (see below). |
 | `requires` | `string[]` | No | IDs of packages this one depends on. Missing deps produce a boot warning. |
 | `daemon` | `string` | No | Path to daemon script. Auto-detects `daemon.lua` if absent. Set to `"-"` to disable auto-detection. |
@@ -173,13 +176,13 @@ In **folder mode**, both live in a sibling `.config.json` file:
 
 Any `.lua` file placed in the `lib/` directory of a package is
 automatically discoverable via `require()`.  Riverdeck adds every
-`.packages/*/lib/` path to the Lua `package.path` for all script
+`.config/packages/*/lib/` path to the Lua `package.path` for all script
 runners.
 
 ```lua
 -- In any button script:
 local mylib = require("mylib")
--- Resolves to .packages/vendor.pkgname/lib/mylib.lua
+-- Resolves to .config/packages/vendor.pkgname/lib/mylib.lua
 ```
 
 ---
@@ -215,22 +218,51 @@ Auto-detection:
 
 ---
 
-## Icon Packs
+## Icons
 
-A package can ship directories of icon images that layout buttons can
-reference.  Declare them in `provides.icon_packs`:
+A package can ship named icons that button scripts reference by name.
+Declare them as a map in `provides.icons`, where keys are logical icon
+names and values are package-root-relative paths to image files:
 
 ```json
 {
   "provides": {
-    "icon_packs": ["icons"]
+    "icons": {
+      "vol-up":   "icons/vol-up.png",
+      "vol-down": "icons/vol-down.svg"
+    }
   }
 }
 ```
 
-Buttons reference icons as `pkg://vendor.pkgname/icons/my-icon.png`.
+Button scripts and templates reference icons using the `pkg://name#iconname`
+URI syntax in the `icon` field:
+
+```lua
+return { icon = "pkg://vendor.pkgname#vol-up", text = "VOL+" }
+```
+
+The `#iconname` fragment looks up the name in the package's `icons` map and
+resolves to the image file at install time.  If the icon name is not found,
+the field is silently ignored and the button falls back to `color` + `text`.
 
 Supported image formats: PNG, JPEG, SVG.
+
+> **Note:** SVG files are composited as-is over the color layer.  Colors
+> baked into the SVG are preserved.  Use the `color` field for background
+> tinting when the icon uses transparency.
+
+---
+
+## Package IDs and Naming
+
+Package IDs default to the directory name.  The `"id"` field in
+`manifest.json` overrides this.
+
+**Convention:** Use reverse-DNS notation for third-party packages to avoid
+collisions (e.g. `com.example.mypack`, `io.github.username.pack`).  This is
+advisory — Riverdeck does not enforce it.  The built-in `riverdeck` package
+is exempt.
 
 ---
 
@@ -239,20 +271,42 @@ Supported image formats: PNG, JPEG, SVG.
 When Riverdeck encounters a `pkg://` URI (in layout button `script`,
 `icon`, or `template` fields), it resolves through these steps:
 
+### Script / template URIs — `pkg://pkgID/relative/path`
+
 1. Parse the URI: `pkg://<packageID>/<relative-path>`
-2. Find the installed package with matching ID in `.packages/`
+2. Find the installed package with matching ID in `.config/packages/`
 3. Join the package root with the relative path
 4. Return the absolute filesystem path
 
 Example: `pkg://riverdeck/templates/home.lua`
--> `<configDir>/.packages/riverdeck/templates/home.lua`
+→ `<configDir>/.config/packages/riverdeck/templates/home.lua`
+
+### Icon URIs — `pkg://pkgID#iconName`
+
+1. Parse the URI: `pkg://<packageID>#<iconName>`
+2. Find the installed package with matching ID
+3. Look up `iconName` in `provides.icons` map
+4. Join the package root with the map value
+5. Return the absolute filesystem path
+
+Example: `pkg://riverdeck#cpu`
+→ `<configDir>/.config/packages/riverdeck/icons/cpu.svg`
+
+### Config-root-relative paths — `/path/to/file`
+
+A leading `/` in `icon` (or other path fields) means relative to the
+config root directory, **not** the filesystem root.
+
+### Script-dir-relative paths — `./path/to/file`
+
+A leading `./` means relative to the directory containing the Lua script.
 
 ---
 
 ## Example: Minimal Package
 
 ```
-.packages/
+.config/packages/
   mytools/
     manifest.json
     templates/
@@ -298,7 +352,7 @@ return M
 ## Example: Full Package with Daemon
 
 ```
-.packages/
+.config/packages/
   homeassistant/
     manifest.json
     lib/
@@ -322,11 +376,15 @@ return M
   "description": "Control Home Assistant entities from your Stream Deck.",
   "provides": {
     "libraries": ["lib/ha_client.lua"],
+    "icons": {
+      "light":  "icons/light.svg",
+      "sensor": "icons/sensor.svg"
+    },
     "templates": [
       {
         "id": "light_toggle",
         "label": "Light Toggle",
-        "icon": "icons/light.svg",
+        "icon": "pkg://homeassistant#light",
         "script": "templates/light_toggle.lua",
         "description": "Toggle a Home Assistant light entity.",
         "metadata_schema": [
@@ -348,7 +406,7 @@ return M
       {
         "id": "sensor",
         "label": "Sensor Display",
-        "icon": "icons/sensor.svg",
+        "icon": "pkg://homeassistant#sensor",
         "script": "templates/sensor.lua",
         "description": "Display a Home Assistant sensor value.",
         "metadata_schema": [

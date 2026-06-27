@@ -1,0 +1,52 @@
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - stylecheck
+    - gocyclo
+    - gocognit
+    - thelper
+    - misspell
+    - gofmt
+    - goimports
+    - unused
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  gocognit:
+    min-complexity: 20
+  staticcheck:
+    checks:
+      - all
+      - -ST1000  # package comments not required for all pkgs
+  stylecheck:
+    checks:
+      - all
+      - -ST1000
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gocyclo
+    - path: cmd/riverdeck-debug-prober/
+      linters:
+        - gocyclo
+        - gocognit
+    - path: pkg/streamdeck/image.go
+      linters:
+        - gocyclo
+    - path: pkg/lualib/
+      linters:
+        - stylecheck  # Lua-facing names intentionally non-Go-style

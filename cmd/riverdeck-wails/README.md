@@ -1,19 +1,49 @@
-# README
+# riverdeck-wails
 
-## About
+> **Experimental -- large portions do not work.**
+>
+> This editor is in early development. The UI renders but many editing operations are broken, incomplete, or absent. Do not rely on it for any production workflow.
 
-This is the official Wails Vanilla template.
+A standalone desktop GUI for designing Riverdeck button layouts, built with [Wails v2](https://wails.io/).
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+## What Works
 
-## Live Development
+- Launching the application
+- Viewing the editor interface
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## What Doesn't Work
+
+- Most editing operations
+- Saving layout changes reliably
+- Script file management
+- Package browsing
+- Drag-and-drop layout editing
 
 ## Building
 
-To build a redistributable, production mode package, use `wails build`.
+Wails must be installed:
+
+```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
+
+Then from the project root:
+
+```bash
+cd cmd/riverdeck-wails
+wails build
+```
+
+For live development with hot reload:
+
+```bash
+wails dev
+```
+
+The dev server also exposes Go methods at `http://localhost:34115` for browser-based testing.
+
+## Architecture
+
+The editor frontend communicates with the main Riverdeck process via the embedded HTTP API (`pkg/editorserver`). The Wails app shells around this and provides a native window and OS integration (file dialogs, tray, etc.).
+
+Until the editor reaches a functional state, layout files can be edited directly as JSON. See the [layout.json format in the main README](../../README.md#layout-mode-experimental).

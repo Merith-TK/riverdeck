@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod:*)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(go list:*)",
+      "Bash(go doc:*)",
+      "Bash(go get:*)",
+      "Bash(mage:*)",
+      "Bash(wails:*)",
+      "mcp__riverdeck-wsdevice__rd_connect",
+      "mcp__riverdeck-wsdevice__rd_get_state",
+      "mcp__riverdeck-wsdevice__rd_read_layout",
+      "mcp__riverdeck-wsdevice__rd_disconnect",
+      "mcp__riverdeck-wsdevice__rd_press_key"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "riverdeck-wsdevice"
+  ],
+  "spinnerTipsEnabled": false
+}

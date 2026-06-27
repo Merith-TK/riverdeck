@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/merith-tk/riverdeck/pkg/platform"
 	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"gopkg.in/yaml.v3"
 )
@@ -20,7 +21,7 @@ import (
 // The file is round-tripped through a yaml.Node tree so that key order and
 // indentation from the original file are preserved on every save.
 func (s *Server) handleAppConfig(w http.ResponseWriter, r *http.Request) {
-	cfgPath := filepath.Join(s.cfg.ConfigDir, "config.yml")
+	cfgPath := platform.ConfigFile(s.cfg.ConfigDir)
 
 	switch r.Method {
 	case http.MethodGet:

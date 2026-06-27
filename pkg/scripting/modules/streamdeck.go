@@ -29,6 +29,8 @@ func (m *StreamDeckModule) Loader(L *lua.LState) int {
 		"get_model":      m.sdGetModel,
 		"get_keys":       m.sdGetKeys,
 		"get_layout":     m.sdGetLayout,
+		"device_id":      m.sdGetDeviceID,
+		"device_serial":  m.sdGetDeviceID,
 	})
 	L.Push(mod)
 	return 1
@@ -162,4 +164,16 @@ func (m *StreamDeckModule) sdGetLayout(L *lua.LState) int {
 	L.Push(lua.LNumber(m.device.Cols()))
 	L.Push(lua.LNumber(m.device.Rows()))
 	return 2
+}
+
+// sdGetDeviceID returns the device serial number / UUID.
+// Lua: streamdeck.device_id() -> string | nil
+// Lua: streamdeck.device_serial() -> string | nil
+func (m *StreamDeckModule) sdGetDeviceID(L *lua.LState) int {
+	if m.device == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+	L.Push(lua.LString(m.device.GetInfo().Serial))
+	return 1
 }

@@ -45,6 +45,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/merith-tk/riverdeck/pkg/platform"
 )
 
 // MetadataField describes a single editable metadata key for a ButtonTemplate.
@@ -73,13 +75,15 @@ type MetadataField struct {
 // Users reference it in layout.json as "pkg://vendor.pkg/template_id".
 type ButtonTemplate struct {
 	// ID is the local identifier, e.g. "volume_up".
-	// The full reference key is "pkg://<packageID>/<id>".
+	// The full reference key is "pkg://<packageID>/<template.ID>".
 	ID string `json:"id"`
 
 	// Label is the default button label text.
 	Label string `json:"label"`
 
-	// Icon is a relative path (from the package root) to the default icon image.
+	// Icon is the icon reference for this template. It may be:
+	//   - a pkg:// URI with icon name: "pkg://riverdeck#home"
+	//   - a relative path from the package root: "icons/home.svg"
 	Icon string `json:"icon,omitempty"`
 
 	// Script is a relative path (from the package root) to the Lua script.
@@ -115,9 +119,10 @@ type PackageManifest struct {
 		Libraries []string `json:"libraries"`
 		// Buttons lists relative paths to pre-built button scripts (informational).
 		Buttons []string `json:"buttons"`
-		// IconPacks lists relative paths to directories containing image files
-		// that can be referenced by layout buttons as "vendor.pkg/icons/name.png".
-		IconPacks []string `json:"icon_packs"`
+		// Icons maps named icon keys to relative paths from the package root.
+		// Scripts and layout buttons reference these as "pkg://packagename#iconname".
+		// Example: {"home": "icons/home.svg", "back": "icons/back.svg"}
+		Icons map[string]string `json:"icons"`
 		// Templates is an inline list of reusable button templates this package ships.
 		Templates []ButtonTemplate `json:"templates"`
 	} `json:"provides"`
@@ -166,9 +171,10 @@ type ScannedPackage struct {
 	// Script and Icon fields converted to absolute paths.
 	ResolvedTemplates []ResolvedButtonTemplate
 
-	// ResolvedIconPackDirs is the list of absolute directory paths for this
-	// package's icon packs (one per entry in Manifest.Provides.IconPacks).
-	ResolvedIconPackDirs []string
+	// ResolvedIcons maps named icon keys to their absolute filesystem paths.
+	// Populated from Manifest.Provides.Icons; each relative path is joined
+	// against Dir to produce an absolute path.
+	ResolvedIcons map[string]string
 }
 
 // ResolvedButtonTemplate is a ButtonTemplate whose Script and Icon paths have
@@ -193,14 +199,14 @@ type ResolvedButtonTemplate struct {
 // Individual packages with unreadable or malformed manifest.json are logged and
 // still included -- the lib/ directory can still be found without a manifest.
 func ScanPackages(configDir string) ([]*ScannedPackage, error) {
-	packagesDir := filepath.Join(configDir, ".packages")
+	packagesDir := platform.PackagesDir(configDir)
 
 	entries, err := os.ReadDir(packagesDir)
 	if os.IsNotExist(err) {
 		return nil, nil // no packages directory - nothing to do
 	}
 	if err != nil {
-		return nil, fmt.Errorf("scanning .packages: %w", err)
+		return nil, fmt.Errorf("scanning packages: %w", err)
 	}
 
 	var packages []*ScannedPackage
@@ -213,11 +219,15 @@ func ScanPackages(configDir string) ([]*ScannedPackage, error) {
 		pkgDir := filepath.Join(packagesDir, entry.Name())
 		pkg := &ScannedPackage{Dir: pkgDir}
 
-		// Parse manifest.json (optional - missing file is not an error).
-		manifestPath := filepath.Join(pkgDir, "manifest.json")
+		// Parse riverdeck.pkg.manifest.json (preferred) or manifest.json (legacy).
+		// The new filename takes priority; fall back to the old name for compatibility.
+		manifestPath := filepath.Join(pkgDir, "riverdeck.pkg.manifest.json")
+		if _, statErr := os.Stat(manifestPath); os.IsNotExist(statErr) {
+			manifestPath = filepath.Join(pkgDir, "manifest.json")
+		}
 		if data, readErr := os.ReadFile(manifestPath); readErr == nil {
 			if jsonErr := json.Unmarshal(data, &pkg.Manifest); jsonErr != nil {
-				fmt.Printf("[!] Package %s: invalid manifest.json: %v\n", entry.Name(), jsonErr)
+				fmt.Printf("[!] Package %s: invalid manifest: %v\n", entry.Name(), jsonErr)
 				// Fall through - still try to use lib/ even with a bad manifest.
 			}
 		}
@@ -268,17 +278,23 @@ func ScanPackages(configDir string) ([]*ScannedPackage, error) {
 			if tmpl.Script != "" {
 				rt.AbsScript = filepath.Join(pkgDir, tmpl.Script)
 			}
+			// Resolve template icon: if it's already a pkg:// URI leave it as-is;
+			// otherwise treat it as a relative path from the package root.
 			if tmpl.Icon != "" {
-				rt.AbsIcon = filepath.Join(pkgDir, tmpl.Icon)
+				if len(tmpl.Icon) >= 6 && tmpl.Icon[:6] == "pkg://" {
+					rt.AbsIcon = tmpl.Icon // URI, resolved at render time via resolver
+				} else {
+					rt.AbsIcon = filepath.Join(pkgDir, tmpl.Icon)
+				}
 			}
 			pkg.ResolvedTemplates = append(pkg.ResolvedTemplates, rt)
 		}
 
-		// Resolve icon pack directories to absolute paths.
-		for _, rel := range pkg.Manifest.Provides.IconPacks {
-			abs := filepath.Join(pkgDir, rel)
-			if info, statErr := os.Stat(abs); statErr == nil && info.IsDir() {
-				pkg.ResolvedIconPackDirs = append(pkg.ResolvedIconPackDirs, abs)
+		// Resolve icon registry entries to absolute paths.
+		if len(pkg.Manifest.Provides.Icons) > 0 {
+			pkg.ResolvedIcons = make(map[string]string, len(pkg.Manifest.Provides.Icons))
+			for name, rel := range pkg.Manifest.Provides.Icons {
+				pkg.ResolvedIcons[name] = filepath.Join(pkgDir, filepath.FromSlash(rel))
 			}
 		}
 

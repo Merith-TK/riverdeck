@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/merith-tk/riverdeck/pkg/platform"
 )
 
 // Validate checks a Layout for structural correctness and returns a list of
@@ -59,10 +61,10 @@ func Exists(configDir string) bool {
 	return err == nil
 }
 
-// Load reads layout.json from configDir and parses it.
-// Returns (nil, nil) when the file does not exist so callers can fall back
-// gracefully to the file-browser navigator.
-func Load(configDir string) (*Layout, error) {
+// LoadFile reads layout.json from configDir and returns a normalised LayoutFile.
+// Old-format files ({"pages":[...]}) are automatically promoted to
+// Layouts["default"].  Returns (nil, nil) when the file does not exist.
+func LoadFile(configDir string) (*LayoutFile, error) {
 	data, err := os.ReadFile(LayoutPath(configDir))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -71,26 +73,147 @@ func Load(configDir string) (*Layout, error) {
 		return nil, fmt.Errorf("reading layout.json: %w", err)
 	}
 
-	var l Layout
-	if err := json.Unmarshal(data, &l); err != nil {
+	var f LayoutFile
+	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parsing layout.json: %w", err)
 	}
-	return &l, nil
+
+	// Backward compat: old format had pages at the top level.
+	if len(f.Pages) > 0 && len(f.Layouts) == 0 {
+		if f.Layouts == nil {
+			f.Layouts = make(map[string]*Layout)
+		}
+		f.Layouts["default"] = &Layout{Pages: f.Pages}
+		f.Pages = nil
+	}
+
+	return &f, nil
 }
 
-// Save writes l as layout.json into configDir (creating the directory if needed).
-// The file is written atomically: it is first written to a temp file and then
-// renamed so a concurrent reader never sees a half-written file.
-func Save(configDir string, l *Layout) error {
+// LoadForDevice returns the Layout assigned to deviceID in configDir/layout.json.
+// If deviceID has no explicit assignment, "default" is used.
+// Returns a new empty Layout when the file does not exist or the layout is absent.
+func LoadForDevice(configDir, deviceID string) (*Layout, error) {
+	f, err := LoadFile(configDir)
+	if err != nil {
+		return nil, err
+	}
+	if f == nil || len(f.Layouts) == 0 {
+		return NewEmpty(), nil
+	}
+
+	name := "default"
+	if deviceID != "" {
+		if f.Devices != nil {
+			if assigned, ok := f.Devices[deviceID]; ok {
+				name = assigned
+			}
+		}
+	}
+
+	if lay, ok := f.Layouts[name]; ok {
+		return lay, nil
+	}
+	// Final fallback: "default" layout (in case a named layout was deleted).
+	if name != "default" {
+		if lay, ok := f.Layouts["default"]; ok {
+			return lay, nil
+		}
+	}
+	return NewEmpty(), nil
+}
+
+// SaveLayout updates (or creates) the named layout in configDir/layout.json.
+// Other layouts and device assignments in the file are preserved.
+func SaveLayout(configDir, name string, lay *Layout) error {
+	f, err := LoadFile(configDir)
+	if err != nil {
+		return err
+	}
+	if f == nil {
+		f = &LayoutFile{}
+	}
+	if f.Layouts == nil {
+		f.Layouts = make(map[string]*Layout)
+	}
+	f.Layouts[name] = lay
+	return writeFile(configDir, f)
+}
+
+// DeviceDir returns the per-device cache directory (.config/devices/{id}/).
+func DeviceDir(configDir, deviceID string) string {
+	return filepath.Join(platform.DevicesDir(configDir), deviceID)
+}
+
+// SaveDeviceGeometry writes a DeviceGeometry snapshot to
+// configDir/.devices/{id}/device.json.
+func SaveDeviceGeometry(configDir string, g *DeviceGeometry) error {
+	dir := DeviceDir(configDir, g.ID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(g, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "device.json"), data, 0644)
+}
+
+// LoadAllDeviceGeometries reads all device.json files from
+// configDir/.config/devices/*/device.json and returns them.
+func LoadAllDeviceGeometries(configDir string) ([]*DeviceGeometry, error) {
+	root := platform.DevicesDir(configDir)
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []*DeviceGeometry
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(root, e.Name(), "device.json")
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var g DeviceGeometry
+		if json.Unmarshal(data, &g) == nil {
+			out = append(out, &g)
+		}
+	}
+	return out, nil
+}
+
+// AssignDeviceLayout updates the Devices map in configDir/layout.json so that
+// deviceID is assigned to layoutName.
+func AssignDeviceLayout(configDir, deviceID, layoutName string) error {
+	f, err := LoadFile(configDir)
+	if err != nil {
+		return err
+	}
+	if f == nil {
+		f = &LayoutFile{}
+	}
+	if f.Devices == nil {
+		f.Devices = make(map[string]string)
+	}
+	f.Devices[deviceID] = layoutName
+	return writeFile(configDir, f)
+}
+
+// writeFile serialises f to configDir/layout.json atomically.
+func writeFile(configDir string, f *LayoutFile) error {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-
-	data, err := json.MarshalIndent(l, "", "  ")
+	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshalling layout: %w", err)
+		return fmt.Errorf("marshalling layout file: %w", err)
 	}
-
 	tmp := LayoutPath(configDir) + ".tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return fmt.Errorf("writing layout.json.tmp: %w", err)

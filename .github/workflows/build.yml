@@ -53,6 +53,26 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libudev-dev upx
 
+      # ---------- Lint ----------
+      - name: Install golangci-lint
+        if: runner.os == 'Linux'
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run golangci-lint
+        if: runner.os == 'Linux'
+        run: golangci-lint run ./...
+        continue-on-error: true  # TODO: remove after lint fixes
+
+      - name: Run go vet
+        run: go vet ./...
+
+      # ---------- Test ----------
+      - name: Test
+        run: go test -v -count=1 -coverprofile=coverage.out ./pkg/...
+
+      - name: Display coverage summary
+        run: go tool cover -func=coverage.out | tail -5
+
       # ---------- Build ----------
       - name: Build
         run: mage build

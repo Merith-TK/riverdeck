@@ -1,5 +1,14 @@
 -- uptime.lua - Shows system uptime
 -- background() polls the shell every 60s; passive() just reads state (fast).
+--
+-- passive(key, state) return table fields:
+--   color      = {r, g, b}           background fill color (0-255 each); default black
+--   icon       = "pkg://pkg#name"    named icon from package registry, composited over color
+--              = "./assets/img.png"  path relative to this script's directory
+--              = "/path/icon.svg"    path relative to the config root directory
+--   text       = "string"            text drawn on top (supports \n for line breaks)
+--   text_color = {r, g, b}           text color (default: white {255,255,255})
+-- Render order (bottom to top): color -> icon -> text
 
 local shell  = require("shell")
 local system = require("system")
@@ -19,9 +28,12 @@ function script.background(state)
         else
             local out, _, code = shell.exec("uptime -p")
             if code == 0 then
-                state.uptime_days  = tonumber((out or ""):match("(%d+) day"))    or 0
-                state.uptime_hours = tonumber((out or ""):match("(%d+) hour"))   or 0
-                state.uptime_mins  = tonumber((out or ""):match("(%d+) minute")) or 0
+                local d = (out or ""):match("(%d+) day")
+                local h = (out or ""):match("(%d+) hour")
+                local m = (out or ""):match("(%d+) minute")
+                state.uptime_days  = d and tonumber(d) or 0
+                state.uptime_hours = h and tonumber(h) or 0
+                state.uptime_mins  = m and tonumber(m) or 0
             end
         end
         system.refresh()
@@ -37,7 +49,7 @@ function script.passive(key, state)
     local text = d > 0
         and string.format("UP\n%dd %dh", d, h)
         or  string.format("UP\n%dh %dm", h, m)
-    return { color = {0, 100, 200}, text = text, text_color = {255, 255, 255} }
+    return { color = {0, 100, 200}, icon = "pkg://riverdeck#uptime", text = text, text_color = {255, 255, 255} }
 end
 
 return script

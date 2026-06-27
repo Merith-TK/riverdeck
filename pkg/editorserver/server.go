@@ -53,16 +53,17 @@ type Config struct {
 
 // Server holds the editor API state.
 type Server struct {
-	cfg    Config
-	mu     sync.RWMutex
-	layout *layout.Layout // current in-memory layout (nil until first load)
+	cfg        Config
+	mu         sync.RWMutex
+	layout     *layout.Layout // current in-memory layout (nil until first load)
+	layoutName string         // which named layout this session manages ("default" unless overridden)
 }
 
 // New creates a new Server with the given configuration.
 func New(cfg Config) *Server {
-	s := &Server{cfg: cfg}
+	s := &Server{cfg: cfg, layoutName: "default"}
 	// Pre-load the layout so it's available immediately.
-	if lay, err := layout.Load(cfg.ConfigDir); err == nil && lay != nil {
+	if lay, err := layout.LoadForDevice(cfg.ConfigDir, ""); err == nil && lay != nil {
 		s.layout = lay
 	}
 	return s
@@ -93,7 +94,9 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/layout", s.handleLayout)
+	mux.HandleFunc("/api/devices", s.handleDevices)
 	mux.HandleFunc("/api/packages", s.handlePackages)
+	mux.HandleFunc("/api/packages/", s.handlePackagesSub)
 	mux.HandleFunc("/api/scripts", s.handleScripts)
 	mux.HandleFunc("/api/device", s.handleDevice)
 	mux.HandleFunc("/api/mode", s.handleMode)
@@ -108,4 +111,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/custom-template", s.handleCustomTemplate)
 	mux.HandleFunc("/api/custom-template/file", s.handleCustomTemplateFile)
 	mux.HandleFunc("/api/monaco/", s.handleMonaco)
+
+	// Package manager endpoints (new-style)
+	mux.HandleFunc("/api/pkg/install", s.handlePkgInstall)
+	mux.HandleFunc("/api/pkg/remove", s.handlePkgRemove)
+	mux.HandleFunc("/api/pkg/update", s.handlePkgUpdate)
+	mux.HandleFunc("/api/pkg/list", s.handlePkgList)
+	mux.HandleFunc("/api/pkg/daemon", s.handlePkgDaemon)
 }

@@ -70,6 +70,17 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 
+	case http.MethodDelete:
+		if err := os.Remove(abs); err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "not found", http.StatusNotFound)
+			} else {
+				http.Error(w, "delete error: "+err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -204,13 +215,20 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request) {
 	// Convert packages to resolver.PackageInfo.
 	pinfos := make([]resolver.PackageInfo, 0, len(pkgs))
 	for _, pkg := range pkgs {
-		pinfos = append(pinfos, resolver.PackageInfo{
+		info := resolver.PackageInfo{
 			ID:  pkg.Manifest.ID,
 			Dir: pkg.Dir,
-		})
+		}
+		if len(pkg.Manifest.Provides.Icons) > 0 {
+			info.Icons = make(map[string]string, len(pkg.Manifest.Provides.Icons))
+			for name, rel := range pkg.Manifest.Provides.Icons {
+				info.Icons[name] = rel
+			}
+		}
+		pinfos = append(pinfos, info)
 	}
 
-	resolved, err := resolver.Resolve(ref, s.cfg.ConfigDir, pinfos)
+	resolved, err := resolver.Resolve(ref, s.cfg.ConfigDir, s.cfg.ConfigDir, pinfos)
 	if err != nil {
 		http.Error(w, "resolve error: "+err.Error(), http.StatusNotFound)
 		return
@@ -233,8 +251,8 @@ func (s *Server) handleResource(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, resolved)
 }
 
-// handleIcons serves icon images from package icon-pack directories.
-// URL format: GET /api/icons/<packageID>/<relative/path>
+// handleIcons serves icon images from package icon registries.
+// URL format: GET /api/icons/<packageID>/<iconname>
 func (s *Server) handleIcons(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -246,7 +264,7 @@ func (s *Server) handleIcons(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	// Find the matching package.
+	// Find the matching package and icon name.
 	s.mu.RLock()
 	pkgs := s.cfg.Packages
 	s.mu.RUnlock()
@@ -256,15 +274,14 @@ func (s *Server) handleIcons(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	pkgID, iconRel := parts[0], parts[1]
+	pkgID, iconName := parts[0], parts[1]
 	for _, pkg := range pkgs {
 		if pkg.Manifest.ID != pkgID {
 			continue
 		}
-		for _, dir := range pkg.ResolvedIconPackDirs {
-			candidate := filepath.Join(dir, filepath.FromSlash(iconRel))
-			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-				http.ServeFile(w, r, candidate)
+		if absPath, ok := pkg.ResolvedIcons[iconName]; ok {
+			if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
+				http.ServeFile(w, r, absPath)
 				return
 			}
 		}

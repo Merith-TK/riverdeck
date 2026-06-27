@@ -8,6 +8,10 @@ let customTemplates = [];
 let scripts = [];
 let mode = 'folder';
 
+// Multi-device state
+let allDevices = [];       // DeviceGeometry[] from /api/devices
+let currentDeviceID = '';  // currently selected device ID
+
 let currentPageIdx = 0;
 let selectedSlot = null;
 let pendingButton = null;
@@ -39,21 +43,22 @@ require(['vs/editor/editor.main'], function () {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 async function boot() {
 	try {
-		const [dev, lay, pkgs, scr, modeRes] = await Promise.all([
+		const [dev, lay, pkgs, scr, modeRes, devList] = await Promise.all([
 			fetch('/api/device').then(r => r.json()),
 			fetch('/api/layout').then(r => r.json()),
 			fetch('/api/packages').then(r => r.json()),
 			fetch('/api/scripts').then(r => r.json()),
 			fetch('/api/mode').then(r => r.json()),
+			fetch('/api/devices').then(r => r.json()).catch(() => []),
 		]);
 		device = dev;
 		layout = lay || { pages: [] };
 		packages = pkgs || [];
 		scripts = scr || [];
 		mode = modeRes.style || 'folder';
+		allDevices = devList || [];
 
-		document.getElementById('hdr-device').textContent =
-			device.model_name + ' (' + device.cols + 'x' + device.rows + ')';
+		populateDeviceSelector();
 		updateModeToggle();
 		await refreshCustomTemplates();
 		renderAll();
@@ -62,14 +67,89 @@ async function boot() {
 	}
 }
 
+// ── Device selector ───────────────────────────────────────────────────────────
+function populateDeviceSelector() {
+	const sel = document.getElementById('hdr-device-select');
+	sel.innerHTML = '';
+	if (allDevices.length === 0) {
+		const opt = document.createElement('option');
+		opt.value = '';
+		opt.textContent = 'No devices connected';
+		sel.appendChild(opt);
+		currentDeviceID = '';
+		return;
+	}
+	// Add a "default (hardware)" option that uses the /api/device dimensions.
+	const defOpt = document.createElement('option');
+	defOpt.value = '';
+	defOpt.textContent = 'Hardware device (' + device.cols + 'x' + device.rows + ')';
+	sel.appendChild(defOpt);
+
+	for (const d of allDevices) {
+		const opt = document.createElement('option');
+		opt.value = d.id;
+		opt.textContent = d.name + ' — ' + d.cols + 'x' + d.rows + ' [' + d.source + ']';
+		if (d.id === currentDeviceID) opt.selected = true;
+		sel.appendChild(opt);
+	}
+}
+
+async function onDeviceChange(deviceID) {
+	currentDeviceID = deviceID;
+	selectedSlot = null;
+	pendingButton = null;
+
+	if (deviceID !== '') {
+		// Load the geometry for this device.
+		const geom = allDevices.find(d => d.id === deviceID);
+		if (geom) {
+			device = {
+				cols: geom.cols,
+				rows: geom.rows,
+				keys: geom.inputs ? geom.inputs.length : geom.cols * geom.rows,
+				model_name: geom.name,
+				reserved_keys: [],
+				inputs: geom.inputs || [],
+			};
+		}
+		// Load the layout assigned to this device.
+		try {
+			const lay = await fetch('/api/layout?device=' + encodeURIComponent(deviceID)).then(r => r.json());
+			layout = lay || { pages: [] };
+		} catch (e) {
+			toast('Layout load failed: ' + e, true);
+		}
+	} else {
+		// Revert to hardware device dimensions.
+		try {
+			const [dev, lay] = await Promise.all([
+				fetch('/api/device').then(r => r.json()),
+				fetch('/api/layout').then(r => r.json()),
+			]);
+			device = dev;
+			layout = lay || { pages: [] };
+		} catch (e) {
+			toast('Device reload failed: ' + e, true);
+		}
+	}
+	renderAll();
+}
+
 async function reloadFromDisk() {
 	try {
-		const [lay, scr] = await Promise.all([
-			fetch('/api/layout').then(r => r.json()),
+		const layoutURL = currentDeviceID
+			? '/api/layout?device=' + encodeURIComponent(currentDeviceID)
+			: '/api/layout';
+		const [lay, scr, devList] = await Promise.all([
+			fetch(layoutURL).then(r => r.json()),
 			fetch('/api/scripts').then(r => r.json()),
+			fetch('/api/devices').then(r => r.json()).catch(() => []),
 		]);
-		layout = lay || { pages: [] }; scripts = scr || [];
+		layout = lay || { pages: [] };
+		scripts = scr || [];
+		allDevices = devList || [];
 		selectedSlot = null; pendingButton = null;
+		populateDeviceSelector();
 		await refreshCustomTemplates();
 		renderAll();
 		toast('Reloaded from disk');
@@ -112,8 +192,11 @@ async function setMode(newMode) {
 // ── Layout save/load ──────────────────────────────────────────────────────────
 async function saveLayout() {
 	hideSaveErrors();
+	const saveURL = currentDeviceID
+		? '/api/layout?device=' + encodeURIComponent(currentDeviceID)
+		: '/api/layout';
 	try {
-		const resp = await fetch('/api/layout', {
+		const resp = await fetch(saveURL, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(layout),
@@ -177,11 +260,25 @@ function pageHasHome(page) {
 // ── Grid ──────────────────────────────────────────────────────────────────────
 function renderGrid() {
 	const grid = document.getElementById('deck-grid');
-	grid.style.gridTemplateColumns = 'repeat(' + device.cols + ', 82px)';
-	grid.innerHTML = '';
 	const pg = currentPage();
 	const btnMap = {};
 	if (pg) (pg.buttons || []).forEach(function (b) { btnMap[b.slot] = b; });
+
+	// If the current device has explicit input geometry, use it for positioning.
+	const inputs = device.inputs && device.inputs.length > 0 ? device.inputs : null;
+
+	if (inputs) {
+		renderGridFromInputs(grid, inputs, btnMap);
+	} else {
+		renderGridSimple(grid, btnMap);
+	}
+}
+
+// renderGridSimple renders a uniform rows×cols grid (hardware device or no geometry).
+function renderGridSimple(grid, btnMap) {
+	grid.style.gridTemplateColumns = 'repeat(' + device.cols + ', 82px)';
+	grid.style.gridTemplateRows = '';
+	grid.innerHTML = '';
 
 	for (let i = 0; i < device.keys; i++) {
 		const btn = btnMap[i];
@@ -191,7 +288,6 @@ function renderGrid() {
 		if (reserved) el.classList.add('reserved');
 		if (i === selectedSlot) el.classList.add('selected');
 
-		// In folder mode, reserved keys show their role label
 		if (reserved && mode === 'folder') {
 			const role = folderReservedLabel(i);
 			let inner = '<span class="slot-num">' + i + '</span>';
@@ -202,34 +298,74 @@ function renderGrid() {
 			continue;
 		}
 
-		if (btn) {
-			const act = btn.action || 'script';
-			if (act === 'home') el.classList.add('action-home');
-			else if (act === 'settings') el.classList.add('action-settings');
-			else if (act === 'page') el.classList.add('has-page');
-			else if (act === 'back') el.classList.add('has-back');
-			else if (btn.script || btn.template) el.classList.add('has-script');
-		}
-
-		let inner = '<span class="slot-num">' + i + '</span>';
-
-		if (btn) {
-			if (btn.icon) {
-				const iconURL = resolveIconURL(btn.icon);
-				inner += '<img class="key-icon" src="' + esc(iconURL) + '" loading="lazy" onerror="this.style.display=\'none\'">';
-			}
-			inner += '<span class="key-label">' + esc(btn.label || '') + '</span>';
-			if (btn.action && btn.action !== 'script') {
-				inner += '<span class="badge">' + esc(btn.action) + '</span>';
-			}
-		}
-		el.innerHTML = inner;
-
-		(function (slot) {
-			el.addEventListener('click', function () { selectedSlot = slot; initPending(); renderGrid(); renderConfigPanel(); });
-		})(i);
+		decorateKeyCell(el, btn, i);
 		grid.appendChild(el);
 	}
+}
+
+// renderGridFromInputs renders an irregular grid using explicit x/y positions.
+function renderGridFromInputs(grid, inputs, btnMap) {
+	// Compute bounding box.
+	let maxCol = 0, maxRow = 0;
+	for (const inp of inputs) {
+		if (inp.x > maxCol) maxCol = inp.x;
+		if (inp.y > maxRow) maxRow = inp.y;
+	}
+	const cols = maxCol + 1;
+	const rows = maxRow + 1;
+
+	grid.style.gridTemplateColumns = 'repeat(' + cols + ', 82px)';
+	grid.style.gridTemplateRows = 'repeat(' + rows + ', 82px)';
+	grid.innerHTML = '';
+
+	// Create a cell for each grid position.
+	for (let row = 0; row < rows; row++) {
+		for (let col = 0; col < cols; col++) {
+			// Find which input occupies this position.
+			const slotIdx = inputs.findIndex(function (inp) { return inp.x === col && inp.y === row; });
+			const el = document.createElement('div');
+			if (slotIdx === -1) {
+				// Empty grid cell (no input here).
+				el.className = 'key-cell key-cell-empty';
+				grid.appendChild(el);
+				continue;
+			}
+			el.className = 'key-cell';
+			if (slotIdx === selectedSlot) el.classList.add('selected');
+			const btn = btnMap[slotIdx];
+			decorateKeyCell(el, btn, slotIdx);
+			grid.appendChild(el);
+		}
+	}
+}
+
+// decorateKeyCell fills a key cell element with button data and click handler.
+function decorateKeyCell(el, btn, slot) {
+	if (btn) {
+		const act = btn.action || 'script';
+		if (act === 'home') el.classList.add('action-home');
+		else if (act === 'settings') el.classList.add('action-settings');
+		else if (act === 'page') el.classList.add('has-page');
+		else if (act === 'back') el.classList.add('has-back');
+		else if (btn.script || btn.template) el.classList.add('has-script');
+	}
+
+	let inner = '<span class="slot-num">' + slot + '</span>';
+	if (btn) {
+		if (btn.icon) {
+			const iconURL = resolveIconURL(btn.icon);
+			inner += '<img class="key-icon" src="' + esc(iconURL) + '" loading="lazy" onerror="this.style.display=\'none\'">';
+		}
+		inner += '<span class="key-label">' + esc(btn.label || '') + '</span>';
+		if (btn.action && btn.action !== 'script') {
+			inner += '<span class="badge">' + esc(btn.action) + '</span>';
+		}
+	}
+	el.innerHTML = inner;
+
+	(function (s) {
+		el.addEventListener('click', function () { selectedSlot = s; initPending(); renderGrid(); renderConfigPanel(); });
+	})(slot);
 }
 
 function folderReservedLabel(slot) {
@@ -518,6 +654,11 @@ function applySplit(tab) {
 	if (ctabMonaco) ctabMonaco.classList.toggle('active', tab === 'monaco');
 	document.getElementById('form-tab').style.display = tab === 'form' ? '' : 'none';
 	document.getElementById('monaco-tab').style.display = tab === 'monaco' ? '' : 'none';
+	// Force Monaco to recalculate its layout after the tab becomes visible.
+	// Without this call the editor renders as a 0-height element when first shown.
+	if (tab === 'monaco' && monacoEditor) {
+		requestAnimationFrame(() => monacoEditor.layout());
+	}
 }
 
 function switchConfigTab(tab) {
@@ -546,9 +687,18 @@ function updateMeta(input) {
 function liveUpdateGridKey() {
 	if (selectedSlot === null) return;
 	const grid = document.getElementById('deck-grid');
-	const el = grid.children[selectedSlot];
-	if (!el) return;
-	const lbl = el.querySelector('.key-label');
+	// Find the cell with this slot (may not be at index selectedSlot if using geometry grid).
+	const cells = grid.querySelectorAll('.key-cell:not(.key-cell-empty)');
+	let target = null;
+	for (let i = 0; i < cells.length; i++) {
+		const slotEl = cells[i].querySelector('.slot-num');
+		if (slotEl && parseInt(slotEl.textContent) === selectedSlot) {
+			target = cells[i];
+			break;
+		}
+	}
+	if (!target) return;
+	const lbl = target.querySelector('.key-label');
 	if (lbl && pendingButton) lbl.textContent = pendingButton.label || '';
 }
 
@@ -1007,6 +1157,125 @@ async function saveSettings() {
 		toast('Config saved \u2014 restart Riverdeck to apply changes');
 	} catch (e) {
 		toast('Save failed: ' + e, true);
+	}
+}
+
+// ── Package Manager Modal ─────────────────────────────────────────────────────
+
+function showPkgModal() {
+	document.getElementById('pkg-modal-overlay').style.display = 'flex';
+	refreshPkgList();
+}
+
+function hidePkgModal() {
+	document.getElementById('pkg-modal-overlay').style.display = 'none';
+}
+
+async function refreshPkgList() {
+	const container = document.getElementById('pkg-installed-list');
+	container.innerHTML = '<p style="color:var(--txt3);font-size:.82rem">Loading...</p>';
+	try {
+		const resp = await fetch('/api/pkg/list');
+		if (!resp.ok) throw new Error(await resp.text());
+		const pkgs = await resp.json();
+		renderPkgList(pkgs || []);
+	} catch (e) {
+		container.innerHTML = '<p style="color:var(--danger)">Failed: ' + esc(String(e)) + '</p>';
+	}
+}
+
+function renderPkgList(pkgs) {
+	const container = document.getElementById('pkg-installed-list');
+	if (pkgs.length === 0) {
+		container.innerHTML = '<p style="color:var(--txt3);font-size:.82rem">No packages installed.</p>';
+		return;
+	}
+	container.innerHTML = pkgs.map(p => {
+		const name = esc(p.name || p.repo_dir || p.RepoDir || '');
+		const ver = esc(p.version || p.Version || '');
+		const repoDir = esc(p.repo_dir || p.RepoDir || '');
+		const daemonEnabled = p.daemon_enabled || p.DaemonEnabled;
+		return `<div class="pkg-row">
+			<div class="pkg-row-info">
+				<span class="pkg-name">${name}</span>
+				${ver ? `<span class="pkg-ver">${ver}</span>` : ''}
+				<span class="pkg-dir" style="color:var(--txt3);font-size:.75rem">${repoDir}</span>
+			</div>
+			<div class="pkg-row-actions">
+				<label class="toggle-label" title="Enable daemon">
+					<input type="checkbox" ${daemonEnabled ? 'checked' : ''} onchange="setPkgDaemon('${repoDir}', '', this.checked)">
+					Daemon
+				</label>
+				<button class="btn-ghost" style="padding:2px 8px" onclick="updatePackage('${repoDir}')">Update</button>
+				<button class="btn-danger" style="padding:2px 8px" onclick="removePackage('${repoDir}')">Remove</button>
+			</div>
+		</div>`;
+	}).join('');
+}
+
+async function installPackage() {
+	const url = document.getElementById('pkg-install-url').value.trim();
+	const status = document.getElementById('pkg-install-status');
+	if (!url) { status.textContent = 'Enter a package URL first.'; return; }
+	status.textContent = 'Installing...';
+	try {
+		const resp = await fetch('/api/pkg/install', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		status.style.color = 'var(--success)';
+		status.textContent = 'Installed successfully.';
+		document.getElementById('pkg-install-url').value = '';
+		refreshPkgList();
+	} catch (e) {
+		status.style.color = 'var(--danger)';
+		status.textContent = 'Error: ' + String(e);
+	}
+}
+
+async function removePackage(repoDir) {
+	if (!confirm('Remove package ' + repoDir + '?')) return;
+	try {
+		const resp = await fetch('/api/pkg/remove', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url: repoDir }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		toast('Package removed.');
+		refreshPkgList();
+	} catch (e) {
+		toast('Remove failed: ' + e, true);
+	}
+}
+
+async function updatePackage(repoDir) {
+	try {
+		const resp = await fetch('/api/pkg/update', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url: repoDir }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+		toast('Package updated.');
+		refreshPkgList();
+	} catch (e) {
+		toast('Update failed: ' + e, true);
+	}
+}
+
+async function setPkgDaemon(repo, sub, enabled) {
+	try {
+		const resp = await fetch('/api/pkg/daemon', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ repo, sub, enabled }),
+		});
+		if (!resp.ok) throw new Error(await resp.text());
+	} catch (e) {
+		toast('Daemon toggle failed: ' + e, true);
 	}
 }
 

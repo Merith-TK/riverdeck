@@ -1,19 +1,19 @@
 {
-	"name": "FactoryApp Dev",
+	"name": "Arch Linux Dev Container",
 	"image": "git.merith.xyz/oci/archlinux:latest",
 	"remoteUser": "builder",
+	"runArgs": [
+		"--device=/dev/hidraw0:/dev/hidraw0" // Replace with your actual device path if different
+	],
+	"mounts": [
+		"source=/workspace/.claude-shared,target=/.claude-shared,type=bind"
+	],
 	"remoteEnv": {
-		"CLAUDE_CONFIG_DIR": "${containerWorkspaceFolder}/.devcontainer/do-not-commit"
+		"CLAUDE_CONFIG_DIR": "/.claude-shared/config",
+		"CLAUDE_DATA_DIR": "/.claude-shared/data"
 	},
 	"customizations": {
-		"vscode": {
-			"extensions": [
-				"geequlim.godot-tools"
-			],
-			"settings": {
-				"godot_tools.editor_path": "/usr/bin/godot"
-			}
-		}
+		"vscode": {}
 	},
 	"postCreateCommand": "bash ${containerWorkspaceFolder}/.devcontainer/post-create.sh"
 }

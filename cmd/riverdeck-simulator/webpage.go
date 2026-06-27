@@ -66,6 +66,20 @@ const webpageTemplate = `<!DOCTYPE html>
 
     .key canvas, .key img  { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
 
+    .key-label {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      font-size: 10px;
+      text-align: center;
+      color: #fff;
+      background: rgba(0,0,0,0.55);
+      padding: 2px 2px;
+      pointer-events: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .key-index {
       position: absolute;
       bottom: 3px; right: 5px;
@@ -117,7 +131,7 @@ const webpageTemplate = `<!DOCTYPE html>
 <body>
   <header>
     <h1>{{.ModelName}}</h1>
-    <p>Riverdeck Simulator &nbsp;·&nbsp; riverdeck connects on port {{.WsPort}}</p>
+    <p>Riverdeck Simulator &nbsp;·&nbsp; connecting to {{.WsAddr}}</p>
   </header>
 
   <div id="deck">
@@ -183,7 +197,26 @@ const webpageTemplate = `<!DOCTYPE html>
         cell.style.background = '';
         const img = cell.querySelector('img');
         if (img) img.remove();
+        const lbl = cell.querySelector('.key-label');
+        if (lbl) lbl.remove();
       });
+    });
+
+    es.addEventListener('setlabel', e => {
+      const d = JSON.parse(e.data);
+      const cell = document.getElementById('key-' + d.key);
+      if (!cell) return;
+      let lbl = cell.querySelector('.key-label');
+      if (d.text) {
+        if (!lbl) {
+          lbl = document.createElement('span');
+          lbl.className = 'key-label';
+          cell.appendChild(lbl);
+        }
+        lbl.textContent = d.text;
+      } else if (lbl) {
+        lbl.remove();
+      }
     });
 
     es.addEventListener('setbrightness', e => {

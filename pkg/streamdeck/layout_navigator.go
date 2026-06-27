@@ -230,7 +230,7 @@ func (n *LayoutNavigator) RenderPage() error {
 			if img == nil {
 				img = blackImg
 			}
-			data, err := n.dev.EncodeKeyImage(img)
+			data, err := n.dev.EncodeKeyImage(i, img)
 			frames[i] = frame{index: i, data: data, err: err}
 		}()
 	}
@@ -244,6 +244,15 @@ func (n *LayoutNavigator) RenderPage() error {
 			return fmt.Errorf("write key %d: %w", f.index, err)
 		}
 	}
+
+	// Send label text for each button that has one (no-op for hardware/sim).
+	for i := range lp.Buttons {
+		btn := &lp.Buttons[i]
+		if btn.Slot >= 0 && btn.Slot < totalKeys && btn.Label != "" {
+			_ = n.dev.SetLabel(btn.Slot, btn.Label)
+		}
+	}
+
 	return nil
 }
 
@@ -388,17 +397,17 @@ func (n *LayoutNavigator) resolveScript(btn *layout.LayoutButton) (string, error
 	if resolver.IsLuaForbidden(ref) {
 		return "", fmt.Errorf("web Lua scripts are forbidden: %s", btn.Script)
 	}
-	return resolver.Resolve(ref, n.configDir, n.packages)
+	return resolver.Resolve(ref, n.configDir, n.configDir, n.packages)
 }
 
 // renderButton builds the image for a single layout button.
 func (n *LayoutNavigator) renderButton(btn *layout.LayoutButton) image.Image {
 	label := btn.Label
 
-	// Try to load an icon image via the resolver (supports pkg:// URIs).
+	// Try to load an icon image via the resolver (supports pkg://#iconname URIs).
 	if btn.Icon != "" {
 		ref := resolver.Parse(btn.Icon)
-		if iconPath, err := resolver.Resolve(ref, n.configDir, n.packages); err == nil {
+		if iconPath, err := resolver.Resolve(ref, n.configDir, n.configDir, n.packages); err == nil {
 			if img, err := imaging.LoadImage(iconPath); err == nil {
 				resized := n.dev.ResizeImage(img)
 				if label != "" {
