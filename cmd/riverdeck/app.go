@@ -82,7 +82,23 @@ func (a *App) Init(configDir string) error {
 	fmt.Printf("Found %d Stream Deck device(s):\n\n", len(devices))
 	for i, info := range devices {
 		fmt.Printf("Device #%d:\n", i+1)
-		streamdeck.PrintDeviceInfo(info)
+		fmt.Println("===================================================")
+		fmt.Printf("  Model:        %s\n", info.Model.Name)
+		fmt.Printf("  Product:      %s\n", info.Product)
+		fmt.Printf("  Manufacturer: %s\n", info.Manufacturer)
+		fmt.Printf("  Serial:       %s\n", info.Serial)
+		fmt.Printf("  Firmware:     %s\n", info.Firmware)
+		fmt.Printf("  Product ID:   0x%04X\n", info.Model.ProductID)
+		fmt.Println("---------------------------------------------------")
+		fmt.Printf("  Layout:       %d columns x %d rows\n", info.Model.Cols, info.Model.Rows)
+		fmt.Printf("  Total Keys:   %d\n", info.Model.Keys)
+		if info.Model.PixelSize > 0 {
+			fmt.Printf("  Icon Size:    %d x %d pixels\n", info.Model.PixelSize, info.Model.PixelSize)
+			fmt.Printf("  Image Format: %s\n", info.Model.ImageFormat)
+		} else {
+			fmt.Println("  Icon Size:    N/A (no display)")
+		}
+		fmt.Println("===================================================")
 		fmt.Println()
 	}
 

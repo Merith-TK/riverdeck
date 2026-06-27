@@ -70,7 +70,7 @@ func (a *App) runWSDevice(dev *wsdevice.Device) {
 		layoutPageCount = len(lay.Pages)
 		nav = streamdeck.NewLayoutNavigator(dev, sessionDir, lay)
 	} else {
-		nav = streamdeck.NewNavigator(dev, sessionDir)
+		nav = streamdeck.NewFolderNavigator(dev, sessionDir)
 	}
 
 	// Boot a script manager bound to this WS device.

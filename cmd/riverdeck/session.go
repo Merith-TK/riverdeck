@@ -901,7 +901,7 @@ func (s *DeviceSession) createNavigator() streamdeck.NavigatorIface {
 	}
 
 	log.Printf("[*] Device %s: Navigation mode: folder", s.deviceID)
-	return streamdeck.NewNavigator(s.device, s.configDir)
+	return streamdeck.NewFolderNavigator(s.device, s.configDir)
 }
 
 // ── Event loop ───────────────────────────────────────────────────────────────
