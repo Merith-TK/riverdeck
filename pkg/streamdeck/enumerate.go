@@ -80,24 +80,3 @@ func getFirmwareVersion(dev *hid.Device) string {
 	}
 	return string(data[6:])
 }
-
-// PrintDeviceInfo prints detailed information about a device to stdout.
-func PrintDeviceInfo(info DeviceInfo) {
-	fmt.Println("===================================================")
-	fmt.Printf("  Model:        %s\n", info.Model.Name)
-	fmt.Printf("  Product:      %s\n", info.Product)
-	fmt.Printf("  Manufacturer: %s\n", info.Manufacturer)
-	fmt.Printf("  Serial:       %s\n", info.Serial)
-	fmt.Printf("  Firmware:     %s\n", info.Firmware)
-	fmt.Printf("  Product ID:   0x%04X\n", info.Model.ProductID)
-	fmt.Println("---------------------------------------------------")
-	fmt.Printf("  Layout:       %d columns x %d rows\n", info.Model.Cols, info.Model.Rows)
-	fmt.Printf("  Total Keys:   %d\n", info.Model.Keys)
-	if info.Model.PixelSize > 0 {
-		fmt.Printf("  Icon Size:    %d x %d pixels\n", info.Model.PixelSize, info.Model.PixelSize)
-		fmt.Printf("  Image Format: %s\n", info.Model.ImageFormat)
-	} else {
-		fmt.Println("  Icon Size:    N/A (no display)")
-	}
-	fmt.Println("===================================================")
-}
