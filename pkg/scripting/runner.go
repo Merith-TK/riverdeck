@@ -110,6 +110,7 @@ type ScriptRunner struct {
 	bgThreadCancel context.CancelFunc
 	bgSleepUntil   time.Time      // When to resume from sleep
 	bgFunc         *lua.LFunction // Cached background function
+	bgStarted      bool           // True after the first coroutine resume
 
 	// Device access
 	device    streamdeck.DeviceIface
@@ -523,17 +524,12 @@ func (r *ScriptRunner) runBackgroundCoroutine() (bool, int, error) {
 	if r.bgThread == nil {
 		r.bgThread, r.bgThreadCancel = r.L.NewThread()
 		r.bgFunc = bgFn
+		r.bgStarted = false
 	}
 
-	// Prepare resume arguments
-	var resumeArgs []lua.LValue
-	if r.bgFunc != nil {
-		// First resume - pass function and state
-		resumeArgs = []lua.LValue{r.bgFunc, r.state}
-		r.bgFunc = nil // Clear so subsequent resumes don't pass function again
-	} else {
-		// Subsequent resume - no function needed
-		resumeArgs = []lua.LValue{nil}
+	isFirst := !r.bgStarted
+	if isFirst {
+		r.bgStarted = true
 	}
 
 	r.mu.Unlock() // Release struct-field mutex before Lua execution
@@ -547,11 +543,11 @@ func (r *ScriptRunner) runBackgroundCoroutine() (bool, int, error) {
 	var err error
 	var values []lua.LValue
 
-	if len(resumeArgs) > 1 {
+	if isFirst {
 		// First resume - pass function and state
-		status, err, values = r.L.Resume(r.bgThread, resumeArgs[0].(*lua.LFunction), resumeArgs[1])
+		status, err, values = r.L.Resume(r.bgThread, r.bgFunc, r.state)
 	} else {
-		// Subsequent resume - no function needed
+		// Subsequent resume - coroutine yields back to us
 		status, err, values = r.L.Resume(r.bgThread, nil)
 	}
 
