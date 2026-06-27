@@ -25,23 +25,3 @@ func RegisterAll(L *lua.LState) {
 	RegisterPath(L)
 	RegisterURL(L)
 }
-
-// RegisterAllWithLogPrefix is identical to RegisterAll but uses a custom
-// prefix for the log module (e.g. "[script-name] ").
-// NOTE: currently unused internally -- RegisterAll is the standard entry point.
-// Retained for external consumers that need per-script log prefixes.
-func RegisterAllWithLogPrefix(L *lua.LState, logPrefix string) {
-	RegisterUtils(L)
-	RegisterStrings(L)
-	RegisterJSON(L)
-	RegisterTime(L)
-	RegisterLogWithPrefix(L, logPrefix)
-	RegisterMath(L)
-
-	RegisterBase64(L)
-	RegisterCrypto(L)
-
-	RegisterRegex(L)
-	RegisterPath(L)
-	RegisterURL(L)
-}

@@ -111,16 +111,6 @@ func (p *LayoutPage) ButtonBySlot(s int) *LayoutButton {
 	return nil
 }
 
-// PageByName returns the first page whose name matches (case-sensitive).
-func (l *Layout) PageByName(name string) *LayoutPage {
-	for i := range l.Pages {
-		if l.Pages[i].Name == name {
-			return &l.Pages[i]
-		}
-	}
-	return nil
-}
-
 // PageIndexByName returns the index of the first page whose name matches,
 // or -1 if not found.
 func (l *Layout) PageIndexByName(name string) int {

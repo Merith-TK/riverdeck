@@ -98,20 +98,6 @@ func OpenWithConfig(path string, jpegQuality int) (*Device, error) {
 	return d, nil
 }
 
-// OpenFirst opens the first Stream Deck device found.
-// NOTE: currently unused by the application (which uses Enumerate + OpenWithConfig).
-// Retained as a convenience for external consumers and testing.
-func OpenFirst() (*Device, error) {
-	devices, err := Enumerate()
-	if err != nil {
-		return nil, err
-	}
-	if len(devices) == 0 {
-		return nil, fmt.Errorf("no Stream Deck devices found")
-	}
-	return Open(devices[0].Path)
-}
-
 // Close closes the device.
 // Acquires both readMu and writeMu to drain any in-flight HID operations first.
 func (d *Device) Close() error {
