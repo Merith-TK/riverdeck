@@ -1,7 +1,4 @@
-// Package modules contains Lua module loaders that are injected into every
-// script runner.  Each module exposes a focused domain API (HTTP, file I/O,
-// shell, Stream Deck control, etc.) as a preloaded Lua table so that scripts
-// can interact with the host application without raw FFI.
+// This file is part of the modules package. See system.go for the package doc.
 package modules
 
 import (

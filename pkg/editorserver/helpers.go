@@ -1,3 +1,4 @@
+// This file is part of the editorserver package. See server.go for the package doc.
 package editorserver
 
 import (

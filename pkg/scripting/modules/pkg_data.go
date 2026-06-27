@@ -1,3 +1,4 @@
+// This file is part of the modules package. See system.go for the package doc.
 package modules
 
 // pkg_data.go - package-scoped filesystem and JSON storage, available ONLY to

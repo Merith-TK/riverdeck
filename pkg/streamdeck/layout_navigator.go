@@ -1,3 +1,4 @@
+// This file is part of the streamdeck package. See device.go for the package doc.
 package streamdeck
 
 // layout_navigator.go - declarative (non-file-based) navigator for Riverdeck.
@@ -363,10 +364,6 @@ func (n *LayoutNavigator) GetVisibleScripts() map[string]int {
 // is not duplicated between FolderNavigator and LayoutNavigator.
 func (n *LayoutNavigator) CreateTextImageWithColors(text string, bgColor, textColor color.Color) image.Image {
 	return createTextImageWithColors(n.dev.PixelSize(), text, bgColor, textColor)
-}
-
-func (n *LayoutNavigator) createTextImage(text string, bgColor color.Color) image.Image {
-	return n.CreateTextImageWithColors(text, bgColor, color.White)
 }
 
 // RenderTextOnImage composites centred text over an existing image.

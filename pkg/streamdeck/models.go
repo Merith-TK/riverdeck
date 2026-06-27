@@ -1,4 +1,4 @@
-// Package streamdeck provides a Go library for interfacing with Elgato Stream Deck devices.
+// This file is part of the streamdeck package. See device.go for the package doc.
 package streamdeck
 
 // VendorID is the USB vendor ID for Elgato devices.

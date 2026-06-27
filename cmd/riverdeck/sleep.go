@@ -1,3 +1,4 @@
+// This file is part of the riverdeck main package. See app.go for the package doc.
 package main
 
 // sleep.go -- display sleep/wake timeout management.

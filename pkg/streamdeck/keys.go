@@ -1,3 +1,4 @@
+// This file is part of the streamdeck package. See device.go for the package doc.
 package streamdeck
 
 import (

@@ -1,3 +1,4 @@
+// This file is part of the modules package. See system.go for the package doc.
 package modules
 
 import (
