@@ -405,7 +405,6 @@ func (d *Device) SetKeyColor(keyIndex int, c color.Color) error {
 
 // ResizeImage scales an image to fit the device's key size.
 // Maintains aspect ratio and centers the image.
-// OPTIMIZATION: Use Lanczos3 resampling for better quality at similar speed
 func (d *Device) ResizeImage(src image.Image) image.Image {
 	size := d.Model.PixelSize
 	if size == 0 {

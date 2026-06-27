@@ -50,7 +50,7 @@ type App struct {
 
 	// Settings overlay
 	inSettings       bool
-	settingsPage     int  // future: scroll through setting rows
+	settingsPage     int  // current settings scroll row
 	exitConfirming   bool // true after first EXIT press, waiting for confirmation
 	restartRequested bool // set by RELOAD; main loop restarts in-process
 
@@ -208,8 +208,6 @@ func (a *App) Init(configDir string, simAddr string) error {
 	if err := dev.SetBrightness(a.config.Application.Brightness); err != nil {
 		log.Printf("SetBrightness failed: %v", err)
 	}
-
-	log.Printf("[*] Config directory: %s", a.configPath)
 
 	// Always refresh the bundled riverdeck package so templates are physically
 	// present on disk. Delete the old copy, then re-extract from the embed.
