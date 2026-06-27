@@ -134,7 +134,16 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.mu.Unlock()
 
-	// Discover installed packages in .packages/ and build library search paths.
+	if err := m.scanAndStartPackages(); err != nil {
+		return err
+	}
+	m.runBootAnimation()
+	return m.loadScripts()
+}
+
+// scanAndStartPackages discovers .packages/, logs them, populates
+// packageLibPaths, and starts any package daemon scripts.
+func (m *ScriptManager) scanAndStartPackages() error {
 	packages, pkgErr := ScanPackages(m.configDir)
 	if pkgErr != nil {
 		log.Printf("[!] Warning: failed to scan packages: %v", pkgErr)
@@ -142,77 +151,75 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 	m.mu.Lock()
 	m.installedPackages = packages
 	m.mu.Unlock()
-	if len(packages) > 0 {
-		log.Printf("[*] Installed packages (%d):", len(packages))
-		installedIDs := make(map[string]bool, len(packages))
-		for _, pkg := range packages {
-			installedIDs[pkg.Manifest.ID] = true
-		}
-		for _, pkg := range packages {
-			name := pkg.Manifest.Name
-			if name == "" {
-				name = pkg.Manifest.ID
-			}
-			ver := pkg.Manifest.Version
-			if ver == "" {
-				ver = "unknown"
-			}
-			line := fmt.Sprintf("    - %s v%s", name, ver)
-			if pkg.Manifest.Description != "" {
-				line += ": " + pkg.Manifest.Description
-			}
-			log.Printf("%s", line)
-			for _, req := range pkg.Manifest.Requires {
-				if !installedIDs[req] {
-					log.Printf("    [!] %s requires %s (not installed)", pkg.Manifest.ID, req)
-				}
-			}
-			if pkg.LibDir != "" {
-				m.packageLibPaths = append(m.packageLibPaths, pkg.LibDir)
-			}
-		}
 
-		// Boot daemon scripts now that packageLibPaths is fully populated.
-		log.Printf("[*] Starting package daemons...")
-		for _, pkg := range packages {
-			if pkg.DaemonScript == "" {
-				continue
-			}
-			dRunner, dErr := NewScriptRunner(pkg.DaemonScript, m.device, m.configDir, m.packageLibPaths, m.store, pkg.DataDir)
-			if dErr != nil {
-				log.Printf("[!] Package %s: failed to load daemon: %v", pkg.Manifest.ID, dErr)
-				continue
-			}
-			if !dRunner.HasDaemon() {
-				log.Printf("[!] Package %s: daemon.lua has no daemon() function", pkg.Manifest.ID)
-				dRunner.Close()
-				continue
-			}
-			log.Printf("[*] Starting daemon: %s (%s)", pkg.Manifest.ID, pkg.DaemonScript)
-			dRunner.StartDaemon(m.ctx)
-			m.daemonRunners = append(m.daemonRunners, dRunner)
-		}
-	} else {
+	if len(packages) == 0 {
 		log.Printf("[*] No packages installed (.packages/ empty or absent)")
+		return nil
 	}
 
-	// Check for boot animation script - runs synchronously
-	bootPath := filepath.Join(m.configDir, "_boot.lua")
-	if _, err := os.Stat(bootPath); err == nil {
-		m.bootScriptPath = bootPath
-		// Run boot animation synchronously (blocks until complete)
-		m.runBootAnimation()
+	log.Printf("[*] Installed packages (%d):", len(packages))
+	installedIDs := make(map[string]bool, len(packages))
+	for _, pkg := range packages {
+		installedIDs[pkg.Manifest.ID] = true
+	}
+	for _, pkg := range packages {
+		name := pkg.Manifest.Name
+		if name == "" {
+			name = pkg.Manifest.ID
+		}
+		ver := pkg.Manifest.Version
+		if ver == "" {
+			ver = "unknown"
+		}
+		line := fmt.Sprintf("    - %s v%s", name, ver)
+		if pkg.Manifest.Description != "" {
+			line += ": " + pkg.Manifest.Description
+		}
+		log.Printf("%s", line)
+		for _, req := range pkg.Manifest.Requires {
+			if !installedIDs[req] {
+				log.Printf("    [!] %s requires %s (not installed)", pkg.Manifest.ID, req)
+			}
+		}
+		if pkg.LibDir != "" {
+			m.packageLibPaths = append(m.packageLibPaths, pkg.LibDir)
+		}
 	}
 
-	// Scan for all .lua files recursively
+	// Start daemon scripts now that packageLibPaths is fully populated.
+	log.Printf("[*] Starting package daemons...")
+	for _, pkg := range packages {
+		if pkg.DaemonScript == "" {
+			continue
+		}
+		dRunner, dErr := NewScriptRunner(pkg.DaemonScript, m.device, m.configDir, m.packageLibPaths, m.store, pkg.DataDir)
+		if dErr != nil {
+			log.Printf("[!] Package %s: failed to load daemon: %v", pkg.Manifest.ID, dErr)
+			continue
+		}
+		if !dRunner.HasDaemon() {
+			log.Printf("[!] Package %s: daemon.lua has no daemon() function", pkg.Manifest.ID)
+			dRunner.Close()
+			continue
+		}
+		log.Printf("[*] Starting daemon: %s (%s)", pkg.Manifest.ID, pkg.DaemonScript)
+		dRunner.StartDaemon(m.ctx)
+		m.daemonRunners = append(m.daemonRunners, dRunner)
+	}
+	return nil
+}
+
+// loadScripts scans the config directory for .lua button scripts, loads each
+// one, and starts background workers where defined.
+func (m *ScriptManager) loadScripts() error {
 	var scriptPaths []string
 	packagesDir := filepath.Join(m.configDir, ".packages")
 	err := filepath.Walk(m.configDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // Skip errors
+			return nil // skip unreadable entries
 		}
-		// Skip the entire .packages/ tree - those scripts are managed
-		// separately as daemon runners and Lua library files, not deck buttons.
+		// Skip the entire .packages/ tree — those scripts are daemon runners
+		// and Lua library files, not deck buttons.
 		if info.IsDir() && filepath.Clean(path) == filepath.Clean(packagesDir) {
 			return filepath.SkipDir
 		}
@@ -224,14 +231,12 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to scan config directory: %w", err)
 	}
 
 	log.Printf("[*] Found %d scripts to load...", len(scriptPaths))
 
-	// Load each script
 	loaded := 0
 	for _, scriptPath := range scriptPaths {
 		runner, err := NewScriptRunner(scriptPath, m.device, m.configDir, m.packageLibPaths, m.store, "")
@@ -239,8 +244,6 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 			log.Printf("[!] Failed to load %s: %v", filepath.Base(scriptPath), err)
 			continue
 		}
-
-		// Set refresh callback
 		runner.SetRefreshCallback(m.requestRefresh)
 
 		m.mu.Lock()
@@ -248,8 +251,6 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 		m.mu.Unlock()
 
 		loaded++
-
-		// Start background worker if defined
 		if runner.HasBackground() {
 			log.Printf("[*] Starting background worker: %s", runner.ScriptName)
 			runner.StartBackground(m.ctx)
@@ -258,11 +259,9 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 
 	log.Printf("[*] Loaded %d/%d scripts", loaded, len(scriptPaths))
 
-	// Clear loading indicator
 	if m.device != nil {
 		m.device.Clear()
 	}
-
 	return nil
 }
 
