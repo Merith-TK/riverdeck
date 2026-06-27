@@ -133,11 +133,11 @@ func (s *Server) createCustomTemplate(w http.ResponseWriter, r *http.Request) {
 		luaBody = `-- Custom Riverdeck button
 local M = {}
 
-function M.passive(ctx)
-  ctx.text("Hello")
+function M.passive(key, state)
+  return { text = "Hello" }
 end
 
-function M.trigger(ctx)
+function M.trigger(state)
   -- called when the key is pressed
 end
 

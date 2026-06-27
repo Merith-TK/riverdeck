@@ -25,11 +25,11 @@ var builtinLuaTemplates = []luaTemplate{
 		Content: `-- Minimal Riverdeck button
 local M = {}
 
-function M.passive(ctx)
-  ctx.text("Hello")
+function M.passive(key, state)
+  return { text = "●" }
 end
 
-function M.trigger(ctx)
+function M.trigger(state)
   -- called when the key is pressed
 end
 
@@ -44,14 +44,16 @@ return M
 local M = {}
 local system = require("system")
 
-function M.passive(ctx)
-  local count = (state.count or 0)
-  ctx.text(tostring(count))
+function M.background(state)
+  state.count = 0
+  while true do
+    state.count = state.count + 1
+    system.sleep(1000)
+  end
 end
 
-function M.background()
-  state.count = (state.count or 0) + 1
-  system.sleep(1000)
+function M.passive(key, state)
+  return { text = tostring(state.count or 0) }
 end
 
 return M
@@ -63,16 +65,17 @@ return M
 		Description: "Button that reads per-button config values set in the editor.",
 		Content: `-- Configurable button (uses the config module)
 local M = {}
-local config = require("config")
+local cfg = require("config").load()
 
-function M.passive(ctx)
-  local label = config.get("label") or "Click me"
-  ctx.text(label)
+function M.passive(key, state)
+  return {
+    text       = cfg.label or "Button",
+    text_color = { r = cfg.r or 255, g = cfg.g or 255, b = cfg.b or 255 },
+  }
 end
 
-function M.trigger(ctx)
-  local action = config.get("action") or "none"
-  -- perform action ...
+function M.trigger(state)
+  -- called when the key is pressed
 end
 
 return M
@@ -85,18 +88,16 @@ return M
 		Content: `-- Toggle button
 local M = {}
 
-function M.passive(ctx)
-  if state.on then
-    ctx.text("ON")
-    ctx.color(0, 200, 0)
-  else
-    ctx.text("OFF")
-    ctx.color(200, 0, 0)
-  end
+function M.passive(key, state)
+  local on = state.on or false
+  return {
+    text  = on and "ON" or "OFF",
+    color = on and { r = 0, g = 200, b = 0 } or { r = 200, g = 0, b = 0 },
+  }
 end
 
-function M.trigger(ctx)
-  state.on = not state.on
+function M.trigger(state)
+  state.on = not (state.on or false)
 end
 
 return M
