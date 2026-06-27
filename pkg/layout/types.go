@@ -143,6 +143,14 @@ func (p *LayoutPage) ButtonBySlot(s int) *LayoutButton {
 	return nil
 }
 
+// PageByName returns a pointer to the first page whose name matches, or nil.
+func (l *Layout) PageByName(name string) *LayoutPage {
+	if i := l.PageIndexByName(name); i >= 0 {
+		return &l.Pages[i]
+	}
+	return nil
+}
+
 // PageIndexByName returns the index of the first page whose name matches,
 // or -1 if not found.
 func (l *Layout) PageIndexByName(name string) int {
