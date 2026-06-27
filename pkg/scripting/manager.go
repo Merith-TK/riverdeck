@@ -450,7 +450,7 @@ func (m *ScriptManager) GetRunner(scriptPath string) *ScriptRunner {
 }
 
 // IsUsableScript returns true if the script has been loaded and defines at least
-// one of background / passive / trigger. Used by the Navigator to filter the
+// one of background / passive / trigger. Used by the FolderNavigator to filter the
 // button list so that helper-only scripts are not shown as buttons.
 func (m *ScriptManager) IsUsableScript(scriptPath string) bool {
 	m.mu.RLock()

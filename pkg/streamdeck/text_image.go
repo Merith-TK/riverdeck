@@ -1,6 +1,6 @@
 package streamdeck
 
-// text_image.go - package-level image-creation helpers shared by Navigator
+// text_image.go - package-level image-creation helpers shared by FolderNavigator
 // and LayoutNavigator.  Both exported method wrappers delegate here so the
 // rendering logic lives in exactly one place.
 

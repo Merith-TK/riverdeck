@@ -14,7 +14,7 @@ package streamdeck
 //
 // Reserved keys (col 0) behaviour:
 //   - BackKey/Toggle1Key/Toggle2Key return the same physical indices as the
-//     folder Navigator so that the settings overlay works unchanged.
+//     FolderNavigator so that the settings overlay works unchanged.
 //   - RenderPage draws the standard SET/<-/T1/T2 labels for those keys first.
 //   - If the current layout page explicitly places a button at a reserved slot,
 //     that button's label/icon is drawn on top, overriding the default.
@@ -359,8 +359,8 @@ func (n *LayoutNavigator) GetVisibleScripts() map[string]int {
 
 // ── NavigatorIface - image helpers ───────────────────────────────────────────
 
-// CreateTextImageWithColors delegates to Navigator's implementation via a
-// shared helper so we don't duplicate that code.
+// CreateTextImageWithColors delegates to a shared helper so image rendering
+// is not duplicated between FolderNavigator and LayoutNavigator.
 func (n *LayoutNavigator) CreateTextImageWithColors(text string, bgColor, textColor color.Color) image.Image {
 	return createTextImageWithColors(n.dev.PixelSize(), text, bgColor, textColor)
 }

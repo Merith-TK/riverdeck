@@ -48,7 +48,7 @@ func (a *App) OpenEditor() {
 // createNavigator constructs the appropriate navigator based on the configured
 // navigation style:
 //
-//	"folder" (default) - file-browser Navigator, same behaviour as before.
+//	"folder" (default) - file-browser FolderNavigator, same behaviour as before.
 //	"layout"           - declarative LayoutNavigator; fails if layout.json absent.
 //	"auto"             - LayoutNavigator when layout.json exists, else folder.
 func (a *App) createNavigator(dev streamdeck.DeviceIface, dir string) streamdeck.NavigatorIface {
@@ -83,5 +83,5 @@ func (a *App) createNavigator(dev streamdeck.DeviceIface, dir string) streamdeck
 	}
 
 	log.Printf("[*] Navigation mode: folder")
-	return streamdeck.NewNavigator(dev, dir)
+	return streamdeck.NewFolderNavigator(dev, dir)
 }

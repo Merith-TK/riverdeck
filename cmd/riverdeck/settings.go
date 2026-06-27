@@ -63,7 +63,7 @@ type settingsLayout struct {
 // ── Settings key helpers ─────────────────────────────────────────────────────
 // These derive physical key positions directly from device geometry so that the
 // settings overlay is independent of which navigator mode is active.  The
-// convention mirrors the folder-mode Navigator: col 0 is always reserved for
+// convention mirrors the FolderNavigator: col 0 is always reserved for
 // navigation meta-keys.
 
 // settingsBackKey returns physical key 0 (col 0, row 0).

@@ -36,13 +36,13 @@ type Page struct {
 //
 // KeyBack is always key 0 (col 0, row 0) on every known device.
 // Toggle1 and Toggle2 indices depend on the column count and are exposed via
-// Navigator.Toggle1Key() / Toggle2Key() rather than as compile-time constants.
+// FolderNavigator.Toggle1Key() / Toggle2Key() rather than as compile-time constants.
 const (
 	KeyBack = 0 // Row 0, Col 0 - Navigate back / settings entry
 )
 
-// Navigator manages folder-based navigation on a Stream Deck.
-type Navigator struct {
+// FolderNavigator manages folder-based navigation on a Stream Deck.
+type FolderNavigator struct {
 	dev          DeviceIface
 	rootPath     string
 	currentDir   string
@@ -55,9 +55,9 @@ type Navigator struct {
 	scriptValidator func(path string) bool
 }
 
-// NewNavigator creates a new navigator for the given device and root config path.
-func NewNavigator(dev DeviceIface, rootPath string) *Navigator {
-	n := &Navigator{
+// NewFolderNavigator creates a new navigator for the given device and root config path.
+func NewFolderNavigator(dev DeviceIface, rootPath string) *FolderNavigator {
+	n := &FolderNavigator{
 		dev:        dev,
 		rootPath:   rootPath,
 		currentDir: rootPath,
@@ -68,7 +68,7 @@ func NewNavigator(dev DeviceIface, rootPath string) *Navigator {
 }
 
 // calculateKeyLayout determines which keys are for content vs reserved.
-func (n *Navigator) calculateKeyLayout() {
+func (n *FolderNavigator) calculateKeyLayout() {
 	cols := n.dev.Cols()
 	rows := n.dev.Rows()
 
@@ -90,7 +90,7 @@ func (n *Navigator) calculateKeyLayout() {
 
 // BackKey returns the physical key index for the back/settings button (col 0, row 0).
 // This is always 0 on all known Stream Deck models.
-func (n *Navigator) BackKey() int {
+func (n *FolderNavigator) BackKey() int {
 	if len(n.reservedKeys) > 0 {
 		return n.reservedKeys[0]
 	}
@@ -99,7 +99,7 @@ func (n *Navigator) BackKey() int {
 
 // Toggle1Key returns the physical key index for the T1 reserved button (col 0, row 1).
 // On a 5-col device this is key 5; on an 8-col XL it is key 8, etc.
-func (n *Navigator) Toggle1Key() int {
+func (n *FolderNavigator) Toggle1Key() int {
 	if len(n.reservedKeys) > 1 {
 		return n.reservedKeys[1]
 	}
@@ -108,7 +108,7 @@ func (n *Navigator) Toggle1Key() int {
 
 // Toggle2Key returns the physical key index for the T2 reserved button (col 0, row 2).
 // On a 5-col device this is key 10; on an 8-col XL it is key 16, etc.
-func (n *Navigator) Toggle2Key() int {
+func (n *FolderNavigator) Toggle2Key() int {
 	if len(n.reservedKeys) > 2 {
 		return n.reservedKeys[2]
 	}
@@ -116,7 +116,7 @@ func (n *Navigator) Toggle2Key() int {
 }
 
 // IsReservedKey reports whether keyIndex is in the reserved column (col 0).
-func (n *Navigator) IsReservedKey(keyIndex int) bool {
+func (n *FolderNavigator) IsReservedKey(keyIndex int) bool {
 	for _, k := range n.reservedKeys {
 		if k == keyIndex {
 			return true
@@ -126,37 +126,37 @@ func (n *Navigator) IsReservedKey(keyIndex int) bool {
 }
 
 // GetContentKeys returns the key indices available for page content.
-func (n *Navigator) GetContentKeys() []int {
+func (n *FolderNavigator) GetContentKeys() []int {
 	keys := make([]int, len(n.contentKeys))
 	copy(keys, n.contentKeys)
 	return keys
 }
 
 // ContentKeyCount returns the number of keys available for content.
-func (n *Navigator) ContentKeyCount() int {
+func (n *FolderNavigator) ContentKeyCount() int {
 	return len(n.contentKeys)
 }
 
 // CurrentPath returns the current directory path.
-func (n *Navigator) CurrentPath() string {
+func (n *FolderNavigator) CurrentPath() string {
 	return n.currentDir
 }
 
 // SetScriptValidator sets a function that is called for each .lua candidate.
 // Return true to show the file, false to hide it. Useful for filtering out
 // scripts that do not define any of background/passive/trigger.
-func (n *Navigator) SetScriptValidator(fn func(path string) bool) {
+func (n *FolderNavigator) SetScriptValidator(fn func(path string) bool) {
 	n.scriptValidator = fn
 }
 
 // IsAtRoot returns true if we're at the root config directory.
-func (n *Navigator) IsAtRoot() bool {
+func (n *FolderNavigator) IsAtRoot() bool {
 	return n.currentDir == n.rootPath
 }
 
 // CurrentDirScript returns the path to the .directory.lua inside the current
 // folder, or an empty string if no such file exists.
-func (n *Navigator) CurrentDirScript() string {
+func (n *FolderNavigator) CurrentDirScript() string {
 	p := filepath.Join(n.currentDir, ".directory.lua")
 	if _, err := os.Stat(p); err == nil {
 		return p
@@ -165,7 +165,7 @@ func (n *Navigator) CurrentDirScript() string {
 }
 
 // LoadPage loads the current page and returns page info.
-func (n *Navigator) LoadPage() (*Page, error) {
+func (n *FolderNavigator) LoadPage() (*Page, error) {
 	entries, err := os.ReadDir(n.currentDir)
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", n.currentDir, err)
@@ -275,7 +275,7 @@ func (n *Navigator) LoadPage() (*Page, error) {
 }
 
 // NavigateInto enters a subdirectory.
-func (n *Navigator) NavigateInto(path string) error {
+func (n *FolderNavigator) NavigateInto(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
@@ -289,7 +289,7 @@ func (n *Navigator) NavigateInto(path string) error {
 }
 
 // NavigateBack goes to the parent directory.
-func (n *Navigator) NavigateBack() bool {
+func (n *FolderNavigator) NavigateBack() bool {
 	if n.IsAtRoot() {
 		return false
 	}
@@ -299,18 +299,18 @@ func (n *Navigator) NavigateBack() bool {
 }
 
 // NavigateToRoot returns to the root config directory.
-func (n *Navigator) NavigateToRoot() {
+func (n *FolderNavigator) NavigateToRoot() {
 	n.currentDir = n.rootPath
 	n.pageIndex = 0
 }
 
 // PageIndex returns the current page index (0-based).
-func (n *Navigator) PageIndex() int {
+func (n *FolderNavigator) PageIndex() int {
 	return n.pageIndex
 }
 
 // NextPage moves to the next page.
-func (n *Navigator) NextPage() bool {
+func (n *FolderNavigator) NextPage() bool {
 	page, err := n.LoadPage()
 	if err != nil {
 		return false
@@ -323,7 +323,7 @@ func (n *Navigator) NextPage() bool {
 }
 
 // PrevPage moves to the previous page.
-func (n *Navigator) PrevPage() bool {
+func (n *FolderNavigator) PrevPage() bool {
 	if n.pageIndex > 0 {
 		n.pageIndex--
 		return true
@@ -342,7 +342,7 @@ func (n *Navigator) PrevPage() bool {
 //     otherwise shows dim "T1" which a .directory.lua passive script can repaint.
 //   - T2  key (col 0, row 2): always shows dim "T2" for script use; T2 is never
 //     consumed by pagination because Back+T1 already cover both directions.
-func (n *Navigator) RenderPage() error {
+func (n *FolderNavigator) RenderPage() error {
 	page, err := n.LoadPage()
 	if err != nil {
 		return err
@@ -440,7 +440,7 @@ func (n *Navigator) RenderPage() error {
 // HandleKeyPress handles a key press and returns the action to take.
 // Returns: (item *PageItem, navigated bool, err error)
 // If navigated is true, the page changed. If item is non-nil, it's an action to execute.
-func (n *Navigator) HandleKeyPress(keyIndex int) (*PageItem, bool, error) {
+func (n *FolderNavigator) HandleKeyPress(keyIndex int) (*PageItem, bool, error) {
 	page, err := n.LoadPage()
 	if err != nil {
 		return nil, false, err
@@ -487,7 +487,7 @@ func (n *Navigator) HandleKeyPress(keyIndex int) (*PageItem, bool, error) {
 
 // GetVisibleScripts returns a map of script paths to key indices for visible scripts.
 // Includes both action scripts and folder .directory.lua passive scripts.
-func (n *Navigator) GetVisibleScripts() map[string]int {
+func (n *FolderNavigator) GetVisibleScripts() map[string]int {
 	page, err := n.LoadPage()
 	if err != nil {
 		return make(map[string]int)
@@ -508,20 +508,20 @@ func (n *Navigator) GetVisibleScripts() map[string]int {
 }
 
 // createTextImage creates a simple image with text.
-func (n *Navigator) createTextImage(text string, bgColor color.Color) image.Image {
+func (n *FolderNavigator) createTextImage(text string, bgColor color.Color) image.Image {
 	return n.CreateTextImageWithColors(text, bgColor, color.White)
 }
 
 // CreateTextImageWithColors creates an image with text and custom colors.
 // This is exported for use by script passive updates.
-func (n *Navigator) CreateTextImageWithColors(text string, bgColor, textColor color.Color) image.Image {
+func (n *FolderNavigator) CreateTextImageWithColors(text string, bgColor, textColor color.Color) image.Image {
 	return createTextImageWithColors(n.dev.PixelSize(), text, bgColor, textColor)
 }
 
 // RenderTextOnImage draws centred text over an already-rendered image without
 // replacing the background. The caller is responsible for passing an image
 // that has already been resized to the device's pixel size.
-func (n *Navigator) RenderTextOnImage(base image.Image, text string, textColor color.Color) image.Image {
+func (n *FolderNavigator) RenderTextOnImage(base image.Image, text string, textColor color.Color) image.Image {
 	return renderTextOnImage(n.dev.PixelSize(), base, text, textColor)
 }
 
