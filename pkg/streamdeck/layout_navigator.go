@@ -73,6 +73,13 @@ func (n *LayoutNavigator) SetPackages(pkgs []resolver.PackageInfo) {
 	n.packages = pkgs
 }
 
+// SetLayout replaces the layout and resets navigation to the root page.
+// Call RenderPage() after to push the change to the device.
+func (n *LayoutNavigator) SetLayout(lay *layout.Layout) {
+	n.lay = lay
+	n.navStack = []int{0}
+}
+
 // calculateKeyLayout puts all physical keys into contentKeys.
 // In layout mode, no column is hard-reserved; the home key is identified
 // dynamically by scanning the current page for action:"home".

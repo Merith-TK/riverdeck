@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/merith-tk/riverdeck/pkg/editorserver"
 	"github.com/merith-tk/riverdeck/pkg/layout"
 	"github.com/merith-tk/riverdeck/pkg/platform"
+	"github.com/merith-tk/riverdeck/pkg/scripting"
 	"github.com/merith-tk/riverdeck/pkg/streamdeck"
 	"github.com/merith-tk/riverdeck/pkg/util"
 	"github.com/merith-tk/riverdeck/pkg/wsdevice"
@@ -193,7 +196,69 @@ func (a *App) Init(configDir string) error {
 		}
 	}
 
+	a.startEditorServer()
+
 	return nil
+}
+
+// startEditorServer starts an HTTP server that serves the layout editor UI and
+// API when network.editor_enabled is true in the config.  The server binds to
+// network.editor_host (default "127.0.0.1") to avoid accidental LAN exposure.
+func (a *App) startEditorServer() {
+	if !a.config.Network.EditorEnabled {
+		return
+	}
+	if len(a.sessions) == 0 {
+		log.Println("[!] Editor: no device sessions available, skipping")
+		return
+	}
+
+	s := a.sessions[0]
+	dev := s.device
+
+	pkgs, _ := scripting.ScanPackages(a.configPath)
+
+	edSrv := editorserver.New(editorserver.Config{
+		ConfigDir: a.configPath,
+		Packages:  pkgs,
+		Device: editorserver.DeviceDimensions{
+			Cols:      dev.Cols(),
+			Rows:      dev.Rows(),
+			Keys:      dev.Keys(),
+			ModelName: dev.ModelName(),
+		},
+		OnLayoutSaved: func(l *layout.Layout) {
+			for _, sess := range a.sessions {
+				sess.reloadLayout(l)
+			}
+		},
+		GetMode: func() string {
+			return a.config.UI.NavigationStyle
+		},
+		OnModeChanged: func(style string) {
+			a.config.UI.NavigationStyle = style
+		},
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", edSrv.Handler())
+	mux.Handle("/", http.FileServer(http.FS(resources.EditorAssetsFS())))
+
+	port := a.config.Network.EditorPort
+	if port == 0 {
+		port = 9001
+	}
+	host := a.config.Network.EditorHost
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	go func() {
+		log.Printf("[*] Layout editor available at http://%s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Printf("[!] Editor server stopped: %v", err)
+		}
+	}()
 }
 
 // Run starts all device sessions (each in its own goroutine). It blocks

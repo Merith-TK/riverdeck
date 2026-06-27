@@ -3,16 +3,18 @@ application:
   passive_fps: 15
   timeout: 30
   debug: false
+  git_backend: auto
 device:
   auto_detect: true
   path: ""
   model: ""
+  multi_mode: shared
 scripting:
   enable_background: true
   execution_timeout: 30
   max_concurrent_scripts: 10
 ui:
-  navigation_style: filesystem
+  navigation_style: layout
   show_hidden_files: false
   labels:
     back: <-
@@ -26,6 +28,9 @@ network:
   verify_ssl: true
   websocket_enabled: true
   websocket_port: 9000
+  editor_enabled: true
+  editor_port: 9001
+  editor_host: "127.0.0.1"
 logging:
   level: info
   file: ""

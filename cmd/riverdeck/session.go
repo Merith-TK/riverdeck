@@ -901,6 +901,18 @@ func (s *DeviceSession) OpenEditor(rootConfigPath string) {
 	log.Printf("[*] Device %s: Editor window spawned (pid %d)", s.deviceID, cmd.Process.Pid)
 }
 
+// reloadLayout pushes a newly saved layout into the session's navigator
+// (if it is a LayoutNavigator) and re-renders the current page.
+func (s *DeviceSession) reloadLayout(l *layout.Layout) {
+	ln, ok := s.nav.(*streamdeck.LayoutNavigator)
+	if !ok {
+		return
+	}
+	ln.SetLayout(l)
+	_ = s.nav.RenderPage()
+	s.updateVisibleScripts()
+}
+
 // ── Navigator creation ──────────────────────────────────────────────────────
 
 func (s *DeviceSession) createNavigator() streamdeck.NavigatorIface {

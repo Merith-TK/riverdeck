@@ -59,10 +59,13 @@ type PerformanceConfig struct {
 }
 
 type NetworkConfig struct {
-	HTTPTimeout      int  `yaml:"http_timeout"`
-	VerifySSL        bool `yaml:"verify_ssl"`
-	WebSocketEnabled bool `yaml:"websocket_enabled"`
-	WebSocketPort    int  `yaml:"websocket_port"` // default 9000
+	HTTPTimeout      int    `yaml:"http_timeout"`
+	VerifySSL        bool   `yaml:"verify_ssl"`
+	WebSocketEnabled bool   `yaml:"websocket_enabled"`
+	WebSocketPort    int    `yaml:"websocket_port"` // default 9000
+	EditorEnabled    bool   `yaml:"editor_enabled"`
+	EditorPort       int    `yaml:"editor_port"` // default 9001
+	EditorHost       string `yaml:"editor_host"` // default "127.0.0.1"
 }
 
 type LoggingConfig struct {
@@ -117,6 +120,9 @@ func DefaultConfig() *Config {
 			VerifySSL:        true,
 			WebSocketEnabled: false,
 			WebSocketPort:    9000,
+			EditorEnabled:    false,
+			EditorPort:       9001,
+			EditorHost:       "127.0.0.1",
 		},
 		Logging: LoggingConfig{
 			Level:       "info",
