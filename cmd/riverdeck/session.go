@@ -150,6 +150,12 @@ func NewDeviceSession(
 	s.nav = s.createNavigator()
 	s.nav.SetScriptValidator(s.scriptMgr.IsUsableScript)
 
+	// Wire app-exit callback so the navigator re-renders when an app exits.
+	s.scriptMgr.SetAppExitCallback(func() {
+		_ = s.nav.RenderPage()
+		s.updateVisibleScripts()
+	})
+
 	// Start the passive update loop
 	s.scriptMgr.StartPassiveLoop()
 
@@ -682,7 +688,8 @@ func (s *DeviceSession) handleKeyEvent(event streamdeck.KeyEvent) error {
 	}
 	s.heldKeysMu.Unlock()
 
-	if backTransition {
+	// Suppress the input-lock side-effect of holding Back in app mode.
+	if backTransition && !s.scriptMgr.IsInAppMode() {
 		s.handleBackHoldChange(newBackHeld)
 	}
 
@@ -695,7 +702,8 @@ func (s *DeviceSession) handleKeyEvent(event streamdeck.KeyEvent) error {
 		return nil
 	}
 
-	if newBackHeld && event.Key != streamdeck.KeyBack {
+	// Suppress the Back+key combo block in app mode (all keys route to the app).
+	if newBackHeld && event.Key != streamdeck.KeyBack && !s.scriptMgr.IsInAppMode() {
 		return nil
 	}
 
@@ -713,6 +721,16 @@ func (s *DeviceSession) handleKeyEvent(event streamdeck.KeyEvent) error {
 
 	if s.inSettings {
 		return s.handleSettingsKeyEvent(event.Key)
+	}
+
+	// App mode: route all keys to the active app runner.
+	if s.scriptMgr.IsInAppMode() {
+		go func() {
+			if err := s.scriptMgr.RunAppKey(event.Key); err != nil {
+				log.Printf("Device %s: app key error: %v", s.deviceID, err)
+			}
+		}()
+		return nil
 	}
 
 	if event.Key == streamdeck.KeyBack && s.nav.IsAtRoot() && s.nav.PageIndex() == 0 {
@@ -779,6 +797,24 @@ func (s *DeviceSession) handleKeyEvent(event streamdeck.KeyEvent) error {
 		if item.Script != "" {
 			log.Printf("    Script: %s", item.Script)
 			scriptPath := item.Script
+
+			// Check for a paired .app.lua file — if present, enter app mode
+			// instead of running the button's trigger() function.
+			appPath := strings.TrimSuffix(scriptPath, ".lua") + ".app.lua"
+			if _, statErr := os.Stat(appPath); statErr == nil {
+				log.Printf("[*] Device %s: Launching app: %s", s.deviceID, filepath.Base(appPath))
+				packages := s.scriptMgr.PackageInfos()
+				go func() {
+					runner := scripting.NewAppRunner(s.device, appPath, s.configDir, packages)
+					if err := runner.Load(); err != nil {
+						log.Printf("Device %s: app load error: %v", s.deviceID, err)
+						return
+					}
+					s.scriptMgr.EnterAppMode(runner)
+				}()
+				return nil
+			}
+
 			go func() {
 				if err := s.scriptMgr.TriggerScript(scriptPath); err != nil {
 					log.Printf("Device %s: Script error: %v", s.deviceID, err)

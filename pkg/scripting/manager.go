@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -98,6 +99,10 @@ type ScriptManager struct {
 	t1Key    int
 	t2Script string
 	t2Key    int
+
+	// App mode: non-nil when a .app.lua has taken over the device.
+	activeApp  *AppRunner
+	appExitCb  func() // called after app exits so session can re-render nav
 }
 
 // NewScriptManager creates a new script manager.
@@ -288,7 +293,8 @@ func (m *ScriptManager) Boot(ctx context.Context) error {
 		if info.IsDir() {
 			return nil
 		}
-		if filepath.Ext(path) == ".lua" && filepath.Base(path) != "_boot.lua" {
+		base := filepath.Base(path)
+		if filepath.Ext(path) == ".lua" && base != "_boot.lua" && !strings.HasSuffix(base, ".app.lua") {
 			scriptPaths = append(scriptPaths, path)
 		}
 		return nil
@@ -450,6 +456,12 @@ func (m *ScriptManager) deliverUpdate(deliverKey string, keyIndex int, appearanc
 // without waiting for other scripts to finish. USB writes are serialised by
 // the device's own mutex, so concurrent delivery is safe.
 func (m *ScriptManager) runPassiveUpdate() {
+	// In app mode the app runner owns all key rendering.
+	if m.IsInAppMode() {
+		m.runAppPassiveUpdate()
+		return
+	}
+
 	m.mu.RLock()
 	visible := make(map[string]int)
 	for k, v := range m.visibleScripts {
@@ -582,7 +594,11 @@ func (m *ScriptManager) TriggerT2() error {
 }
 
 // runTogglePassive runs t1_passive / t2_passive for the currently registered toggle scripts.
+// Skipped in app mode — the app runner owns all key rendering.
 func (m *ScriptManager) runTogglePassive() {
+	if m.IsInAppMode() {
+		return
+	}
 	type toggleEntry struct {
 		script   string
 		key      int
@@ -668,6 +684,99 @@ func (m *ScriptManager) requestRefresh() {
 	case m.refreshCh <- struct{}{}:
 	default: // already a signal pending--don't block
 	}
+}
+
+// ── App mode ──────────────────────────────────────────────────────────────────
+
+// EnterAppMode activates the given AppRunner, wires its callbacks, and signals
+// a passive refresh. Any previously active app is closed asynchronously.
+func (m *ScriptManager) EnterAppMode(runner *AppRunner) {
+	runner.onExit = m.ExitAppMode
+	runner.onRerender = m.requestRefresh
+
+	m.mu.Lock()
+	old := m.activeApp
+	m.activeApp = runner
+	m.lastDelivered = make(map[string]*KeyAppearance)
+	m.mu.Unlock()
+
+	if old != nil {
+		go old.Close()
+	}
+	m.requestRefresh()
+}
+
+// ExitAppMode deactivates the current app, restores the normal passive loop,
+// and fires the session callback so the navigator re-renders.
+func (m *ScriptManager) ExitAppMode() {
+	m.mu.Lock()
+	old := m.activeApp
+	m.activeApp = nil
+	m.lastDelivered = make(map[string]*KeyAppearance)
+	cb := m.appExitCb
+	m.mu.Unlock()
+
+	if old != nil {
+		// Close asynchronously: ExitAppMode may be called from within the
+		// AppRunner's Lua VM (luaMu held), so Close() must not run inline.
+		go old.Close()
+	}
+
+	m.requestRefresh()
+
+	if cb != nil {
+		cb()
+	}
+}
+
+// IsInAppMode reports whether an app is currently active.
+func (m *ScriptManager) IsInAppMode() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.activeApp != nil
+}
+
+// SetAppExitCallback registers the callback invoked when an app exits.
+// The session uses this to re-render the nav page.
+func (m *ScriptManager) SetAppExitCallback(fn func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.appExitCb = fn
+}
+
+// RunAppKey routes a key press to the active app runner.
+func (m *ScriptManager) RunAppKey(key int) error {
+	m.mu.RLock()
+	runner := m.activeApp
+	m.mu.RUnlock()
+	if runner == nil {
+		return nil
+	}
+	return runner.HandleKey(key)
+}
+
+// runAppPassiveUpdate renders all device keys through the active AppRunner.
+func (m *ScriptManager) runAppPassiveUpdate() {
+	m.mu.RLock()
+	runner := m.activeApp
+	m.mu.RUnlock()
+
+	if runner == nil || m.device == nil {
+		return
+	}
+
+	totalKeys := m.device.Keys()
+	var wg sync.WaitGroup
+	for key := 0; key < totalKeys; key++ {
+		wg.Add(1)
+		go func(key int) {
+			defer wg.Done()
+			appearance := runner.RenderKey(key)
+			deliverKey := fmt.Sprintf("app|%d", key)
+			m.deliverUpdate(deliverKey, key, appearance)
+		}(key)
+	}
+	wg.Wait()
 }
 
 // Shutdown stops all runners and cleans up.
