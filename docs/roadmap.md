@@ -41,7 +41,7 @@ Riverdeck is a Stream Deck controller daemon written in Go. It turns a physical 
 | Package | Role |
 |---|---|
 | `pkg/appearance` | `ApplyKeyAppearance` — composites background color + icon + text onto a device key |
-| `pkg/editorserver` | Embedded HTTP REST server for the web/Wails editor (experimental) |
+| `pkg/editorserver` | Embedded HTTP REST server for the web editor (experimental) |
 | `pkg/gitpkg` | Hybrid Git backend — dispatches to system `git` binary or `go-git` fallback |
 | `pkg/imaging` | Image loading, scaling, GIF frame extraction |
 | `pkg/layout` | `layout.json` data model, load/save, device geometry cache |
@@ -61,8 +61,7 @@ Riverdeck is a Stream Deck controller daemon written in Go. It turns a physical 
 
 | Command | Role |
 |---|---|
-| `cmd/riverdeck` | Main daemon: HID device sessions, scripting, system tray, config, WS server |
-| `cmd/riverdeck-wails` | Wails v2 desktop editor (experimental GUI) |
+| `cmd/riverdeck` | Main daemon: HID device sessions, scripting, system tray, config, WS server, editor server |
 | `cmd/riverdeck-simulator` | Software device simulator (HTTP + WebSocket) for hardware-free development |
 | `cmd/riverdeck-debug-prober` | HID packet capture tool for hardware research |
 | `cmd/wsdevice` | Reference WebSocket client implementations (web, Android stubs) |
@@ -95,7 +94,7 @@ Riverdeck is a Stream Deck controller daemon written in Go. It turns a physical 
 
 ### Experimental / Incomplete
 
-- **Layout editor** — `pkg/editorserver` REST API exists and is wired; Wails GUI (`cmd/riverdeck-wails`) compiles but is not feature-complete; web editor (`resources/editor/`) loads but Monaco tab has a known activation bug
+- **Layout editor** — `pkg/editorserver` REST API exists and is wired; web editor (`resources/editor/`) loads but Monaco tab has a known activation bug
 - **Package manager UI** — backend (`pkg/pkgmanager`) is fully implemented; no polished user-facing install flow yet
 - **`security.allowed_commands` / `security.block_network`** — declared in config but not enforced in `shell.go` or `http.go`
 - **Config hot-reload debounce** — restart is immediate; debounce on rapid config saves not yet implemented
@@ -243,13 +242,6 @@ script.t2_passive/t2_trigger  -- T2 reserved-key variants
 - Config panel: edit `.config.yml` in-browser
 - **Bug:** Monaco (Lua editor tab) never activates — `require()` callback does not fire
 
-### Wails Desktop Editor (`cmd/riverdeck-wails`)
-
-- Wails v2 app shell exists and compiles
-- Shares backend with `pkg/editorserver`
-- Feature parity with web editor — neither is complete
-- Marked experimental in README
-
 ### System Tray
 
 - Working on Linux/macOS
@@ -365,7 +357,6 @@ Full spec in `pkg/wsdevice/device.go` and `pkg/wsclient/hello.go`.
 
 ### P4 — Editor Polish
 
-- [ ] Complete Wails desktop editor to feature parity with web editor
 - [ ] Lua syntax highlighting (canvas widget or external editor integration)
 - [ ] In-editor script template creation
 - [ ] Per-device config overlay panel

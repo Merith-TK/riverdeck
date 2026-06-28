@@ -8,7 +8,7 @@ echo "==> [post-create] Workspace: $WORKSPACE_DIR"
 
 echo "==> [post-create] Installing dependencies..."
 yay -Syu --noconfirm
-yay -S go mage wails libayatana-appindicator --noconfirm
+yay -S go mage libayatana-appindicator --noconfirm
 
 # ---- Claude Code ----
 echo "==> [claude] Installing Claude Code..."

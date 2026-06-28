@@ -146,14 +146,11 @@ network:
 
 WebSocket devices only support layout mode. See [cmd/wsdevice/README.md](cmd/wsdevice/README.md) for the protocol spec.
 
-## Editors *(experimental)*
+## Editor *(experimental)*
 
-> The editors are experimental and largely unfinished. Large portions do not work.
+> The editor is experimental and largely unfinished. Large portions do not work.
 
-Two editor components are available for working with layout mode:
-
-- **`riverdeck-wails`** -- A standalone desktop GUI built with [Wails v2](https://wails.io/). See [cmd/riverdeck-wails/README.md](cmd/riverdeck-wails/README.md) for status and build instructions.
-- **Editor HTTP API** -- An embedded HTTP server (`pkg/editorserver`) that serves the editor frontend and exposes endpoints for reading and writing `layout.json` and script files.
+Layout mode is edited via a web UI served by an embedded HTTP server (`pkg/editorserver`), which serves the editor frontend and exposes endpoints for reading and writing `layout.json` and script files. When `network.editor_enabled` is set, use the tray menu's "Open Editor" item (or visit the configured editor URL directly).
 
 ## Supported Models
 
@@ -199,8 +196,7 @@ return {
 
 | Command | Description |
 |---------|-------------|
-| `riverdeck` | Main application -- device communication, scripting, and systray |
-| `riverdeck-wails` | Layout editor GUI *(experimental, largely non-functional)* |
+| `riverdeck` | Main application -- device communication, scripting, systray, and editor server |
 | `riverdeck-debug-prober` | Device inspection and HID feature report tool (GUI + CLI) |
 | `riverdeck-simulator` | Software simulator for testing without hardware |
 | `mcp-wsdevice` | MCP server for AI-driven testing via WebSocket |
@@ -234,5 +230,4 @@ return {
 - `golang.org/x/image` -- Image processing
 - `github.com/getlantern/systray` -- System tray integration
 - `github.com/gorilla/websocket` -- WebSocket server for virtual devices
-- `github.com/wailsapp/wails/v2` -- Desktop GUI for `riverdeck-wails`
 - `fyne.io/fyne/v2` -- GUI toolkit for `riverdeck-debug-prober`

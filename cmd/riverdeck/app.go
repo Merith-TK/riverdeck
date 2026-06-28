@@ -30,8 +30,9 @@ type App struct {
 
 	restartRequested bool
 
-	sessions []*DeviceSession
-	wsServer *wsdevice.Server
+	sessions   []*DeviceSession
+	wsServer   *wsdevice.Server
+	editorAddr string // set by startEditorServer when the editor HTTP server is running
 }
 
 // NewApp creates a new application instance.
@@ -253,6 +254,7 @@ func (a *App) startEditorServer() {
 		host = "127.0.0.1"
 	}
 	addr := fmt.Sprintf("%s:%d", host, port)
+	a.editorAddr = addr
 	go func() {
 		log.Printf("[*] Layout editor available at http://%s", addr)
 		if err := http.ListenAndServe(addr, mux); err != nil {
@@ -287,15 +289,13 @@ func (a *App) Shutdown() {
 	streamdeck.Exit()
 }
 
-// OpenEditor launches the standalone riverdeck-wails editor binary.
-// Uses the first device's geometry for the editor target.
+// OpenEditor opens the system browser at the running layout editor's URL.
 func (a *App) OpenEditor() {
-	if len(a.sessions) == 0 {
-		log.Println("[!] No device sessions available for editor")
+	if a.editorAddr == "" {
+		log.Println("[!] Editor server is not running (network.editor_enabled is false)")
 		return
 	}
-	// Use the first session's device for geometry info.
-	a.sessions[0].OpenEditor(a.configPath)
+	platform.OpenBrowser("http://" + a.editorAddr)
 }
 
 // migrateConfigDir performs one-time migrations from the old config directory

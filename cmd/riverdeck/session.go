@@ -6,9 +6,7 @@ import (
 	"image/color"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -864,41 +862,6 @@ func (s *DeviceSession) triggerEmergencyExit() {
 	s.device.Close()
 	streamdeck.Exit()
 	os.Exit(1) //nolint:revive
-}
-
-// ── Editor ───────────────────────────────────────────────────────────────────
-
-// OpenEditor launches the riverdeck-wails editor binary alongside this one.
-// rootConfigPath is the global config dir (not session-specific) so the
-// editor always opens the main layout file.
-func (s *DeviceSession) OpenEditor(rootConfigPath string) {
-	helperName := "riverdeck-wails"
-	if runtime.GOOS == "windows" {
-		helperName += ".exe"
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		log.Printf("[!] Device %s: Could not resolve executable path: %v", s.deviceID, err)
-		return
-	}
-	helper := filepath.Join(filepath.Dir(exe), helperName)
-	if _, statErr := os.Stat(helper); statErr != nil {
-		log.Printf("[!] Device %s: Editor binary not found: %s", s.deviceID, helper)
-		return
-	}
-	cmd := exec.Command(helper,
-		"-configdir", rootConfigPath,
-		"-cols", fmt.Sprintf("%d", s.device.Cols()),
-		"-rows", fmt.Sprintf("%d", s.device.Rows()),
-		"-model", s.device.ModelName(),
-	)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	if startErr := cmd.Start(); startErr != nil {
-		log.Printf("[!] Device %s: Failed to start editor: %v", s.deviceID, startErr)
-		return
-	}
-	log.Printf("[*] Device %s: Editor window spawned (pid %d)", s.deviceID, cmd.Process.Pid)
 }
 
 // reloadLayout pushes a newly saved layout into the session's navigator
