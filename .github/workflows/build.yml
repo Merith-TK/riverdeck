@@ -62,6 +62,9 @@ jobs:
         run: golangci-lint run ./...
         continue-on-error: true  # TODO: remove after lint fixes
 
+      - name: Generate icons
+        run: mage icons
+
       - name: Run go vet
         run: go vet ./...
 

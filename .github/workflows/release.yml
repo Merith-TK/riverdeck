@@ -53,6 +53,9 @@ jobs:
             libudev-dev upx
 
       # ---------- Lint & Test ----------
+      - name: Generate icons
+        run: mage icons
+
       - name: Run go vet
         run: go vet ./...
 

@@ -14,7 +14,7 @@ scripting:
   execution_timeout: 30
   max_concurrent_scripts: 10
 ui:
-  navigation_style: layout
+  navigation_style: folder
   show_hidden_files: false
   labels:
     back: <-
